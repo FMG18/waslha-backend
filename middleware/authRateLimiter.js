@@ -1,0 +1,1 @@
+const rateLimit=require('express-rate-limit');const authRateLimiter=rateLimit({windowMs:15*60*1000,limit:20,standardHeaders:'draft-7',legacyHeaders:false,skipSuccessfulRequests:false,message:{success:false,error:{code:'AUTH_RATE_LIMITED',message:'Too many authentication attempts, please try again later'}}});module.exports={authRateLimiter};
