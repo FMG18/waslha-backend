@@ -18,6 +18,7 @@ function validateProductionEnv() {
     if (env.jwtSecret.length < 32) throw new Error('JWT_SECRET must be at least 32 characters in production');
     if (env.corsOrigin === '*') throw new Error('CORS_ORIGIN must be explicitly configured in production');
   }
+  if (!Number.isInteger(env.port) || env.port < 1 || env.port > 65535) throw new Error('PORT must be a valid TCP port');
 }
 
 module.exports = { env, validateProductionEnv };
