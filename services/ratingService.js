@@ -1,0 +1,14 @@
+const Rating = require('../models/Rating');
+const Captain = require('../models/Captain');
+
+async function createRating({ ride, customerId, score, comment = '' }) {
+  const rating = await Rating.create({ ride: ride._id, customer: customerId, captain: ride.captain, score, comment });
+  const stats = await Rating.aggregate([
+    { $match: { captain: ride.captain } },
+    { $group: { _id: '$captain', average: { $avg: '$score' }, count: { $sum: 1 } } }
+  ]);
+  const stat = stats[0];
+  await Captain.updateOne({ _id: ride.captain }, { $set: { 'rating.average': stat?.average || 0, 'rating.count': stat?.count || 0 } });
+  return rating;
+}
+module.exports = { createRating };

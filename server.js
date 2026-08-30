@@ -1,51 +1,48 @@
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
-const mongoose = require('mongoose');
 const cors = require('cors');
+const helmet = require('helmet');
+const rateLimit = require('express-rate-limit');
+const mongoose = require('mongoose');
+const { env, validateProductionEnv } = require('./config/env');
+const { connectDatabase } = require('./config/database');
+const { notFound, errorHandler } = require('./middleware/errorHandler');
+const { initializeSocket } = require('./socket');
+const authRoutes = require('./routes/auth');
+const userRoutes = require('./routes/users');
+const captainRoutes = require('./routes/captains');
+const rideRoutes = require('./routes/rides');
+const matchingRoutes = require('./routes/matching');
+const ratingRoutes = require('./routes/ratings');
+const notificationRoutes = require('./routes/notifications');
+const adminRoutes = require('./routes/admin');
 
+validateProductionEnv();
 const app = express();
-app.use(cors());
-app.use(express.json());
-
 const server = http.createServer(app);
-const io = new Server(server, {
-  cors: {
-    origin: "*",
-    methods: ["GET", "POST"]
-  }
-});
-
-// الاتصال بقاعدة البيانات عبر البيئة أو الرابط المباشر
-const MONGO_URI = process.env.MONGO_URI || 'mongodb+srv://hasaana843_db_user:t0dL5h0OyrZ2ma0F@cluster0.9jtdpkk.mongodb.net/waslha_db?appName=Cluster0';
-
-mongoose.connect(MONGO_URI)
-  .then(() => console.log('MongoDB Connected Successfully'))
-  .catch(err => console.error('MongoDB Connection Error:', err));
-
-// أحداث Socket.io للربط اللحظي
-io.on('connection', (socket) => {
-  console.log('مستخدم جديد متصل:', socket.id);
-
-  // استقبال طلب رحلة من الزبون وتمريرها للكباتن
-  socket.on('requestRide', (data) => {
-    console.log('طلب رحلة جديد:', data);
-    io.emit('newRideRequest', data);
-  });
-
-  // تحديث موقع الكابتن وإرساله للوحة التحكم والزبائن
-  socket.on('updateLocation', (data) => {
-    io.emit('captainPositionUpdated', data);
-  });
-
-  socket.on('disconnect', () => {
-    console.log('انقطع اتصال المستخدم:', socket.id);
-  });
-});
-
-app.get('/', (req, res) => {
-  res.send('Waslha Backend Server is Running Online!');
-});
-
-const PORT = process.env.PORT || 5000;
-server.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+const allowedOrigins = env.corsOrigin === '*' ? '*' : env.corsOrigin.split(',').map(v => v.trim()).filter(Boolean);
+app.disable('x-powered-by');
+app.set('trust proxy', 1);
+app.use(helmet());
+app.use(cors({ origin: allowedOrigins, methods: ['GET','POST','PUT','PATCH','DELETE','OPTIONS'], credentials: allowedOrigins !== '*' }));
+app.use(express.json({ limit: '1mb' }));
+app.use(express.urlencoded({ extended: false, limit: '100kb' }));
+app.use('/api', rateLimit({ windowMs: 15 * 60 * 1000, limit: 300, standardHeaders: 'draft-7', legacyHeaders: false, message: { success:false, error:{ code:'RATE_LIMITED', message:'Too many requests, please try again later' } } }));
+const io = new Server(server, { cors: { origin: allowedOrigins, methods: ['GET','POST'], credentials: allowedOrigins !== '*' } });
+initializeSocket(io);
+app.get('/', (req,res) => res.json({ success:true, data:{ service:'Waslha Backend', version:'2.5.0' } }));
+app.get('/health', (req,res) => { const state = mongoose.connection.readyState === 1 ? 'connected' : 'disconnected'; const healthy = env.nodeEnv !== 'production' || state === 'connected'; res.status(healthy ? 200 : 503).json({ success:healthy, data:{ service:'waslha-backend', status:healthy?'ok':'degraded', database:state, environment:env.nodeEnv } }); });
+app.use('/api/auth', authRoutes);
+app.use('/api/users', userRoutes);
+app.use('/api/captains', captainRoutes);
+app.use('/api/rides', rideRoutes);
+app.use('/api/matching', matchingRoutes);
+app.use('/api/ratings', ratingRoutes);
+app.use('/api/notifications', notificationRoutes);
+app.use('/api/admin', adminRoutes);
+connectDatabase().catch(error => console.error('MongoDB connection failed:', error.message));
+app.use(notFound);
+app.use(errorHandler);
+if (require.main === module && !process.env.VERCEL) server.listen(env.port, () => console.log(`Waslha backend listening on port ${env.port}`));
+module.exports = { app, server, io };
