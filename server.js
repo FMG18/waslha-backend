@@ -12,6 +12,7 @@ const authRoutes = require('./routes/auth');
 const userRoutes = require('./routes/users');
 const captainRoutes = require('./routes/captains');
 const rideRoutes = require('./routes/rides');
+const matchingRoutes = require('./routes/matching');
 
 validateProductionEnv();
 const app = express();
@@ -31,6 +32,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/captains', captainRoutes);
 app.use('/api/rides', rideRoutes);
+app.use('/api/matching', matchingRoutes);
 connectDatabase().catch(error => console.error('MongoDB connection failed:', error.message));
 io.on('connection', socket => { console.log(`Socket connected: ${socket.id}`); socket.on('disconnect', reason => console.log(`Socket disconnected: ${socket.id} (${reason})`)); });
 app.use(notFound);
