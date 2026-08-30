@@ -1,26 +1,6 @@
 const Captain = require('../models/Captain');
-
-async function getMe(req, res, next) {
-  try { const captain = await Captain.findOne({ user: req.user._id }).populate('user', 'name phone role profile'); if (!captain) { const e = new Error('Captain profile not found'); e.statusCode = 404; e.code = 'CAPTAIN_NOT_FOUND'; throw e; } res.json({ success: true, data: captain }); } catch (err) { next(err); }
-}
-
-async function updateAvailability(req, res, next) {
-  try {
-    const { availability } = req.body;
-    if (!['offline', 'online'].includes(availability)) { const e = new Error('Availability must be online or offline'); e.statusCode = 400; e.code = 'VALIDATION_ERROR'; throw e; }
-    const captain = await Captain.findOneAndUpdate({ user: req.user._id, status: 'active', availability: { $ne: 'busy' } }, { availability }, { new: true });
-    if (!captain) { const e = new Error('Captain is not available for this change'); e.statusCode = 409; e.code = 'CAPTAIN_NOT_AVAILABLE'; throw e; }
-    res.json({ success: true, data: captain });
-  } catch (err) { next(err); }
-}
-
-async function updateLocation(req, res, next) {
-  try {
-    const lat = Number(req.body.lat), lng = Number(req.body.lng);
-    if (!Number.isFinite(lat) || !Number.isFinite(lng) || lat < -90 || lat > 90 || lng < -180 || lng > 180) { const e = new Error('Valid lat and lng are required'); e.statusCode = 400; e.code = 'INVALID_LOCATION'; throw e; }
-    const captain = await Captain.findOneAndUpdate({ user: req.user._id, status: 'active' }, { currentLocation: { type: 'Point', coordinates: [lng, lat], updatedAt: new Date() } }, { new: true });
-    if (!captain) { const e = new Error('Captain profile not found'); e.statusCode = 404; e.code = 'CAPTAIN_NOT_FOUND'; throw e; }
-    res.json({ success: true, data: { location: captain.currentLocation } });
-  } catch (err) { next(err); }
-}
-module.exports = { getMe, updateAvailability, updateLocation };
+function fail(message, code='VALIDATION_ERROR', statusCode=400) { const e=new Error(message); e.statusCode=statusCode; e.code=code; return e; }
+async function getMe(req,res,next){try{const captain=await Captain.findOne({user:req.user._id}).populate('user','name phone role profile');if(!captain)throw fail('Captain profile not found','CAPTAIN_NOT_FOUND',404);res.json({success:true,data:captain});}catch(err){next(err);}}
+async function updateAvailability(req,res,next){try{const {availability}=req.body;if(!['offline','online'].includes(availability))throw fail('Availability must be online or offline');if(availability==='online'){const captain=await Captain.findOneAndUpdate({user:req.user._id,status:'active',availability:'offline','currentLocation.coordinates':{$exists:true},documentsStatus:{$in:['approved','not_submitted']}},{$set:{availability:'online'}},{new:true});if(!captain)throw fail('Captain must be active and have a valid location before going online','CAPTAIN_NOT_READY',409);return res.json({success:true,data:captain});}const captain=await Captain.findOneAndUpdate({user:req.user._id,status:'active',availability:'online'},{$set:{availability:'offline'}},{new:true});if(!captain)throw fail('Captain is not online','CAPTAIN_NOT_ONLINE',409);res.json({success:true,data:captain});}catch(err){next(err);}}
+async function updateLocation(req,res,next){try{const lat=Number(req.body.lat),lng=Number(req.body.lng);if(!Number.isFinite(lat)||!Number.isFinite(lng)||lat<-90||lat>90||lng<-180||lng>180)throw fail('Valid lat and lng are required','INVALID_LOCATION');const captain=await Captain.findOneAndUpdate({user:req.user._id,status:'active'},{$set:{currentLocation:{type:'Point',coordinates:[lng,lat],updatedAt:new Date()}}},{new:true});if(!captain)throw fail('Captain profile not found','CAPTAIN_NOT_FOUND',404);res.json({success:true,data:{location:captain.currentLocation}});}catch(err){next(err);}}
+module.exports={getMe,updateAvailability,updateLocation};
