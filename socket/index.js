@@ -1,5 +1,7 @@
 const { socketAuth } = require('./auth');
-const { emitRideStatus, updateCaptainLocation } = require('./events');
+const { updateCaptainLocation } = require('./events');
+const Ride = require('../models/Ride');
+const Captain = require('../models/Captain');
 function roomForUser(user) { return `${user.role}:${user._id}`; }
 function roomForRide(id) { return `ride:${id}`; }
 function initializeSocket(io) {
@@ -10,16 +12,19 @@ function initializeSocket(io) {
     socket.on('ride:join', async ({ rideId } = {}, ack) => {
       try {
         if (!rideId) throw new Error('rideId is required');
-        const Ride = require('../models/Ride'); const Captain = require('../models/Captain');
         const ride = await Ride.findById(rideId).select('customer captain'); if (!ride) throw new Error('Ride not found');
         let allowed = user.role === 'admin' || ride.customer.equals(user._id);
-        if (user.role === 'captain') { const captain = await Captain.findOne({ user:user._id }).select('_id'); allowed = !!captain && ride.captain?.equals(captain._id); }
+        if (user.role === 'captain') { const captain = await Captain.findOne({ user:user._id }).select('_id'); allowed = !!captain && !!ride.captain && ride.captain.equals(captain._id); }
         if (!allowed) throw new Error('Forbidden');
         await socket.join(roomForRide(rideId)); if (ack) ack({ success:true });
-      } catch (error) { if (ack) ack({ success:false, error:error.message }); }
+      } catch (error) { if (ack) ack({ success:false,error:error.message }); }
     });
-    socket.on('captain:location:update', async (payload, ack) => { try { const location = await updateCaptainLocation(io,user,payload); if(ack) ack({success:true,data:location}); } catch(error) { if(ack) ack({success:false,error:error.message}); } });
-    socket.on('disconnect', () => {});
+    socket.on('captain:location:update', async (payload, ack) => { try { const location=await updateCaptainLocation(io,user,payload); if(ack) ack({success:true,data:location}); } catch(error) { if(ack) ack({success:false,error:error.message}); } });
   });
 }
-module.exports = { initializeSocket, roomForUser, roomForRide, emitRideStatus };
+function emitRideOffer(io, offer) {
+  if (!offer?.captain?._id || !offer?.ride?._id) return;
+  io.to(`captain:${offer.captain._id}`).emit('captain:ride:new',{rideId:offer.ride._id.toString(),serviceType:offer.ride.serviceType,pickup:offer.ride.pickup,dropoff:offer.ride.dropoff,estimatedFare:offer.ride.estimatedFare,estimatedDistanceKm:offer.ride.estimatedDistanceKm,expiresAt:offer.expiresAt});
+}
+function emitRideStatus(io,ride) { const payload={rideId:ride._id.toString(),status:ride.status}; io.to(roomForRide(ride._id.toString())).emit('ride:status:update',payload); if(ride.customer)io.to(`customer:${ride.customer.toString()}`).emit('ride:status:update',payload); if(ride.captain)io.to(`captain:${ride.captain.toString()}`).emit('ride:status:update',payload); }
+module.exports={initializeSocket,roomForUser,roomForRide,emitRideOffer,emitRideStatus};
