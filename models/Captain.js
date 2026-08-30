@@ -5,7 +5,7 @@ const locationSchema = new mongoose.Schema({
   coordinates: {
     type: [Number],
     required: true,
-    validate: { validator: value => value.length === 2, message: 'Location must contain [lng, lat]' }
+    validate: { validator: value => value.length === 2 && Number.isFinite(value[0]) && Number.isFinite(value[1]) && value[0] >= -180 && value[0] <= 180 && value[1] >= -90 && value[1] <= 90, message: 'Location must contain valid [lng, lat]' }
   },
   updatedAt: { type: Date, default: Date.now }
 }, { _id: false });
