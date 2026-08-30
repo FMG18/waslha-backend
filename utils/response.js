@@ -1,12 +1,1 @@
-function success(res, data = null, statusCode = 200) {
-  return res.status(statusCode).json({ success: true, data });
-}
-
-function failure(res, code, message, statusCode = 400) {
-  return res.status(statusCode).json({
-    success: false,
-    error: { code, message }
-  });
-}
-
-module.exports = { success, failure };
+function success(res,data=null,statusCode=200){return res.status(statusCode).json({success:true,data});}function failure(res,code,message,statusCode=400){return res.status(statusCode).json({success:false,error:{code,message}});}function pagination(page,limit,total){return{page,limit,total,pages:Math.ceil(total/limit)};}module.exports={success,failure,pagination};

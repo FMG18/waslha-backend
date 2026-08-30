@@ -3,68 +3,16 @@ const User = require('../models/User');
 const Captain = require('../models/Captain');
 const Ride = require('../models/Ride');
 
-async function stats(req, res, next) {
-  try {
-    const [users, captains, onlineCaptains, activeRides, completedRides, cancelledRides] = await Promise.all([
-      User.countDocuments(),
-      Captain.countDocuments(),
-      Captain.countDocuments({ status: 'active', availability: 'online' }),
-      Ride.countDocuments({ status: { $in: ['requested','searching','captain_assigned','captain_arriving','captain_arrived','trip_started'] } }),
-      Ride.countDocuments({ status: 'trip_completed' }),
-      Ride.countDocuments({ status: 'cancelled' })
-    ]);
-    res.json({ success: true, data: { users, captains, onlineCaptains, activeRides, completedRides, cancelledRides } });
-  } catch (err) { next(err); }
-}
+const error=(message,code,statusCode)=>{const e=new Error(message);e.code=code;e.statusCode=statusCode;return e;};
+const positiveInt=(value,fallback,max)=>Math.min(Math.max(Number.parseInt(value,10)||fallback,1),max);
 
-async function listRides(req, res, next) {
-  try {
-    const page = Math.max(Number(req.query.page) || 1, 1);
-    const limit = Math.min(Math.max(Number(req.query.limit) || 20, 1), 100);
-    const filter = {};
-    if (req.query.status) filter.status = req.query.status;
-    if (req.query.serviceType) filter.serviceType = req.query.serviceType;
-    const [rides, total] = await Promise.all([
-      Ride.find(filter).populate('customer', 'name phone').populate({ path: 'captain', populate: { path: 'user', select: 'name phone' } }).sort({ createdAt: -1 }).skip((page - 1) * limit).limit(limit),
-      Ride.countDocuments(filter)
-    ]);
-    res.json({ success: true, data: { items: rides, pagination: { page, limit, total, pages: Math.ceil(total / limit) } } });
-  } catch (err) { next(err); }
-}
+async function stats(req,res,next){try{const active=['requested','searching','captain_assigned','captain_arriving','captain_arrived','trip_started'];const [users,customers,captains,onlineCaptains,activeRides,completedRides,cancelledRides]=await Promise.all([User.countDocuments(),User.countDocuments({role:'customer'}),Captain.countDocuments(),Captain.countDocuments({status:'active',availability:'online'}),Ride.countDocuments({status:{$in:active}}),Ride.countDocuments({status:'trip_completed'}),Ride.countDocuments({status:'cancelled'})]);res.json({success:true,data:{users,customers,captains,onlineCaptains,activeRides,completedRides,cancelledRides}});}catch(e){next(e);}}
 
-async function listCaptains(req, res, next) {
-  try {
-    const page = Math.max(Number(req.query.page) || 1, 1);
-    const limit = Math.min(Math.max(Number(req.query.limit) || 20, 1), 100);
-    const filter = {};
-    if (req.query.status) filter.status = req.query.status;
-    if (req.query.availability) filter.availability = req.query.availability;
-    const [captains, total] = await Promise.all([
-      Captain.find(filter).populate('user', 'name phone isActive').sort({ createdAt: -1 }).skip((page - 1) * limit).limit(limit),
-      Captain.countDocuments(filter)
-    ]);
-    res.json({ success: true, data: { items: captains, pagination: { page, limit, total, pages: Math.ceil(total / limit) } } });
-  } catch (err) { next(err); }
-}
+async function listRides(req,res,next){try{const page=positiveInt(req.query.page,1,1000000),limit=positiveInt(req.query.limit,20,100);const filter={};if(req.query.status){const statuses=['requested','searching','captain_assigned','captain_arriving','captain_arrived','trip_started','trip_completed','cancelled'];if(!statuses.includes(req.query.status))throw error('Invalid ride status','INVALID_STATUS',400);filter.status=req.query.status;}if(req.query.serviceType){if(!['taxi','motorcycle','delivery'].includes(req.query.serviceType))throw error('Invalid service type','INVALID_SERVICE_TYPE',400);filter.serviceType=req.query.serviceType;}const [rides,total]=await Promise.all([Ride.find(filter).populate('customer','name phone').populate({path:'captain',populate:{path:'user',select:'name phone'}}).sort({createdAt:-1}).skip((page-1)*limit).limit(limit),Ride.countDocuments(filter)]);res.json({success:true,data:{items:rides,pagination:{page,limit,total,pages:Math.ceil(total/limit)}}});}catch(e){next(e);}}
 
-async function updateCaptainStatus(req, res, next) {
-  try {
-    if (!mongoose.isValidObjectId(req.params.id)) { const e = new Error('Captain not found'); e.statusCode = 404; e.code = 'CAPTAIN_NOT_FOUND'; throw e; }
-    const allowed = ['pending', 'active', 'suspended'];
-    if (!allowed.includes(req.body.status)) { const e = new Error('Invalid captain status'); e.statusCode = 400; e.code = 'INVALID_STATUS'; throw e; }
-    const captain = await Captain.findByIdAndUpdate(req.params.id, { $set: { status: req.body.status, ...(req.body.status !== 'active' ? { availability: 'offline' } : {}) } }, { new: true }).populate('user', 'name phone isActive');
-    if (!captain) { const e = new Error('Captain not found'); e.statusCode = 404; e.code = 'CAPTAIN_NOT_FOUND'; throw e; }
-    res.json({ success: true, data: captain });
-  } catch (err) { next(err); }
-}
+async function listCaptains(req,res,next){try{const page=positiveInt(req.query.page,1,1000000),limit=positiveInt(req.query.limit,20,100);const filter={};if(req.query.status&&!['pending','active','suspended'].includes(req.query.status))throw error('Invalid captain status','INVALID_STATUS',400);if(req.query.availability&&!['offline','online','busy'].includes(req.query.availability))throw error('Invalid availability','INVALID_AVAILABILITY',400);if(req.query.status)filter.status=req.query.status;if(req.query.availability)filter.availability=req.query.availability;const [captains,total]=await Promise.all([Captain.find(filter).populate('user','name phone isActive').sort({createdAt:-1}).skip((page-1)*limit).limit(limit),Captain.countDocuments(filter)]);res.json({success:true,data:{items:captains,pagination:{page,limit,total,pages:Math.ceil(total/limit)}}});}catch(e){next(e);}}
 
-async function updateUserStatus(req, res, next) {
-  try {
-    if (!mongoose.isValidObjectId(req.params.id)) { const e = new Error('User not found'); e.statusCode = 404; e.code = 'USER_NOT_FOUND'; throw e; }
-    const user = await User.findByIdAndUpdate(req.params.id, { $set: { isActive: Boolean(req.body.isActive) } }, { new: true }).select('-password');
-    if (!user) { const e = new Error('User not found'); e.statusCode = 404; e.code = 'USER_NOT_FOUND'; throw e; }
-    res.json({ success: true, data: user });
-  } catch (err) { next(err); }
-}
+async function updateCaptainStatus(req,res,next){try{if(!mongoose.isValidObjectId(req.params.id))throw error('Captain not found','CAPTAIN_NOT_FOUND',404);const allowed=['pending','active','suspended'];if(!allowed.includes(req.body.status))throw error('Invalid captain status','INVALID_STATUS',400);const update={status:req.body.status};if(req.body.status!=='active')update.availability='offline';const captain=await Captain.findByIdAndUpdate(req.params.id,{$set:update},{new:true,runValidators:true}).populate('user','name phone isActive');if(!captain)throw error('Captain not found','CAPTAIN_NOT_FOUND',404);res.json({success:true,data:captain});}catch(e){next(e);}}
 
-module.exports = { stats, listRides, listCaptains, updateCaptainStatus, updateUserStatus };
+async function updateUserStatus(req,res,next){try{if(!mongoose.isValidObjectId(req.params.id))throw error('User not found','USER_NOT_FOUND',404);if(typeof req.body.isActive!=='boolean')throw error('isActive must be boolean','INVALID_STATUS',400);if(req.params.id===req.user._id.toString()&&!req.body.isActive)throw error('Admin cannot deactivate their own account','SELF_DEACTIVATION_FORBIDDEN',409);const user=await User.findByIdAndUpdate(req.params.id,{$set:{isActive:req.body.isActive}},{new:true,runValidators:true}).select('-password');if(!user)throw error('User not found','USER_NOT_FOUND',404);res.json({success:true,data:user});}catch(e){next(e);}}
+module.exports={stats,listRides,listCaptains,updateCaptainStatus,updateUserStatus};

@@ -1,0 +1,15 @@
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const { assertTransition } = require('../services/rideService');
+
+test('ride lifecycle allows valid transitions', () => {
+  assert.doesNotThrow(() => assertTransition('requested', 'searching'));
+  assert.doesNotThrow(() => assertTransition('captain_arrived', 'trip_started'));
+  assert.doesNotThrow(() => assertTransition('trip_started', 'trip_completed'));
+});
+
+test('ride lifecycle rejects invalid transitions', () => {
+  assert.throws(() => assertTransition('requested', 'trip_completed'), /Invalid ride status transition/);
+  assert.throws(() => assertTransition('trip_completed', 'cancelled'), /Invalid ride status transition/);
+  assert.throws(() => assertTransition('cancelled', 'searching'), /Invalid ride status transition/);
+});

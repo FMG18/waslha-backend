@@ -1,27 +1,3 @@
-function notFound(req, res) {
-  res.status(404).json({
-    success: false,
-    error: { code: 'NOT_FOUND', message: 'Route not found' }
-  });
-}
-
-function errorHandler(err, req, res, next) {
-  const statusCode = err.statusCode || 500;
-  const code = err.code || (statusCode === 500 ? 'INTERNAL_SERVER_ERROR' : 'REQUEST_ERROR');
-
-  if (statusCode >= 500) {
-    console.error(`[${req.method} ${req.originalUrl}]`, err.message);
-  }
-
-  res.status(statusCode).json({
-    success: false,
-    error: {
-      code,
-      message: statusCode >= 500 && process.env.NODE_ENV === 'production'
-        ? 'Internal server error'
-        : err.message || 'Request failed'
-    }
-  });
-}
-
-module.exports = { notFound, errorHandler };
+function notFound(req,res){res.status(404).json({success:false,error:{code:'NOT_FOUND',message:'Route not found'}});}
+function errorHandler(err,req,res,next){const statusCode=Number.isInteger(err.statusCode)&&err.statusCode>=400&&err.statusCode<600?err.statusCode:500;let code=err.code||'INTERNAL_SERVER_ERROR';if(err.name==='ValidationError'){code='VALIDATION_ERROR';}else if(err.name==='CastError'){code='INVALID_ID';}else if(err.code===11000){code='DUPLICATE_RESOURCE';}const safeMessage=statusCode>=500&&process.env.NODE_ENV==='production'?'Internal server error':(err.message||'Request failed');if(statusCode>=500)console.error(`[${req.method} ${req.originalUrl}]`,err.message);res.status(statusCode).json({success:false,error:{code,message:safeMessage}});}
+module.exports={notFound,errorHandler};
