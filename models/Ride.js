@@ -1,0 +1,29 @@
+const mongoose = require('mongoose');
+
+const pointSchema = new mongoose.Schema({
+  type: { type: String, enum: ['Point'], default: 'Point' },
+  coordinates: { type: [Number], required: true, validate: { validator: v => v.length === 2 } },
+  address: { type: String, trim: true, maxlength: 300, default: '' }
+}, { _id: false });
+
+const rideSchema = new mongoose.Schema({
+  customer: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
+  captain: { type: mongoose.Schema.Types.ObjectId, ref: 'Captain', default: null, index: true },
+  serviceType: { type: String, enum: ['taxi', 'motorcycle', 'delivery'], required: true, index: true },
+  pickup: { type: pointSchema, required: true },
+  dropoff: { type: pointSchema, required: true },
+  estimatedDistanceKm: { type: Number, required: true, min: 0 },
+  estimatedDurationMin: { type: Number, required: true, min: 0 },
+  estimatedFare: { type: Number, required: true, min: 0 },
+  finalFare: { type: Number, min: 0, default: null },
+  status: { type: String, enum: ['requested', 'searching', 'captain_assigned', 'captain_arriving', 'captain_arrived', 'trip_started', 'trip_completed', 'cancelled'], default: 'requested', index: true },
+  cancellation: { cancelledBy: { type: String, enum: ['customer', 'captain', 'admin', 'system'], default: null }, reason: { type: String, trim: true, maxlength: 300, default: '' }, cancelledAt: { type: Date, default: null } },
+  payment: { method: { type: String, enum: ['cash', 'wallet', 'card'], default: 'cash' }, status: { type: String, enum: ['pending', 'paid', 'failed'], default: 'pending' } }
+}, { timestamps: true, versionKey: false });
+
+rideSchema.index({ pickup: '2dsphere' });
+rideSchema.index({ status: 1, serviceType: 1, createdAt: 1 });
+rideSchema.index({ customer: 1, createdAt: -1 });
+rideSchema.index({ captain: 1, createdAt: -1 });
+
+module.exports = mongoose.model('Ride', rideSchema);
