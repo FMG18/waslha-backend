@@ -2,9 +2,11 @@ const { socketAuth } = require('./auth');
 const { updateCaptainLocation } = require('./events');
 const Ride = require('../models/Ride');
 const Captain = require('../models/Captain');
+let ioInstance = null;
 function roomForUser(user) { return `${user.role}:${user._id}`; }
 function roomForRide(id) { return `ride:${id}`; }
 function initializeSocket(io) {
+  ioInstance = io;
   io.use(socketAuth);
   io.on('connection', socket => {
     const { user } = socket;
@@ -22,9 +24,7 @@ function initializeSocket(io) {
     socket.on('captain:location:update', async (payload, ack) => { try { const location=await updateCaptainLocation(io,user,payload); if(ack) ack({success:true,data:location}); } catch(error) { if(ack) ack({success:false,error:error.message}); } });
   });
 }
-function emitRideOffer(io, offer) {
-  if (!offer?.captain?._id || !offer?.ride?._id) return;
-  io.to(`captain:${offer.captain._id}`).emit('captain:ride:new',{rideId:offer.ride._id.toString(),serviceType:offer.ride.serviceType,pickup:offer.ride.pickup,dropoff:offer.ride.dropoff,estimatedFare:offer.ride.estimatedFare,estimatedDistanceKm:offer.ride.estimatedDistanceKm,expiresAt:offer.expiresAt});
-}
+function emitRideOffer(io, offer) { if(!offer?.captain?._id||!offer?.ride?._id)return; io.to(`captain:${offer.captain._id}`).emit('captain:ride:new',{rideId:offer.ride._id.toString(),serviceType:offer.ride.serviceType,pickup:offer.ride.pickup,dropoff:offer.ride.dropoff,estimatedFare:offer.ride.estimatedFare,estimatedDistanceKm:offer.ride.estimatedDistanceKm,expiresAt:offer.expiresAt}); }
 function emitRideStatus(io,ride) { const payload={rideId:ride._id.toString(),status:ride.status}; io.to(roomForRide(ride._id.toString())).emit('ride:status:update',payload); if(ride.customer)io.to(`customer:${ride.customer.toString()}`).emit('ride:status:update',payload); if(ride.captain)io.to(`captain:${ride.captain.toString()}`).emit('ride:status:update',payload); }
-module.exports={initializeSocket,roomForUser,roomForRide,emitRideOffer,emitRideStatus};
+function emitOffer(offer){if(ioInstance)emitRideOffer(ioInstance,offer);} function emitStatus(ride){if(ioInstance)emitRideStatus(ioInstance,ride);}
+module.exports={initializeSocket,roomForUser,roomForRide,emitRideOffer,emitRideStatus,emitOffer,emitStatus,getIO:()=>ioInstance};
