@@ -1,0 +1,1 @@
+function stripMongoOperators(value){if(Array.isArray(value))return value.map(stripMongoOperators);if(value&&typeof value==='object'){const out={};for(const [key,val] of Object.entries(value)){if(key.startsWith('$')||key.includes('.'))continue;out[key]=stripMongoOperators(val);}return out;}return value;}module.exports={stripMongoOperators};
