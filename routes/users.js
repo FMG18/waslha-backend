@@ -1,6 +1,8 @@
 const express = require('express');
 const { auth } = require('../middleware/auth');
 const User = require('../models/User');
+const bcrypt = require('bcryptjs');
 const router = express.Router();
 router.get('/me', auth, async (req, res, next) => { try { const user = await User.findById(req.user._id); res.json({ success: true, data: user }); } catch (err) { next(err); } });
+router.patch('/me', auth, async (req, res, next) => { try { const user = await User.findById(req.user._id).select('+password'); if (!user) { const e=new Error('User not found'); e.statusCode=404; throw e; } const { name, phone, avatarUrl, currentPassword, newPassword } = req.body || {}; if (name !== undefined) { const n=String(name).trim(); if(n.length<2||n.length>80){const e=new Error('Name must be between 2 and 80 characters');e.statusCode=400;throw e;} user.name=n; } if (phone !== undefined) { const p=String(phone).trim().replace(/[\s()-]/g,''); if(!/^\+?[1-9]\d{7,14}$/.test(p)){const e=new Error('Invalid phone number');e.statusCode=400;throw e;} const exists=await User.findOne({phone:p,_id:{$ne:user._id}}); if(exists){const e=new Error('Phone is already registered');e.statusCode=409;throw e;} user.phone=p; } if (avatarUrl !== undefined) user.profile.avatarUrl=String(avatarUrl).trim().slice(0,500); if(newPassword!==undefined){if(!currentPassword || !(await user.comparePassword(currentPassword))){const e=new Error('Current password is incorrect');e.statusCode=400;throw e;} if(String(newPassword).length<8){const e=new Error('New password must be at least 8 characters');e.statusCode=400;throw e;} user.password=String(newPassword);} await user.save(); res.json({success:true,data:user}); } catch(err){next(err);} });
 module.exports = router;
