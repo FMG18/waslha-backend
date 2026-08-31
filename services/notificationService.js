@@ -1,7 +1,1 @@
-const Notification = require('../models/Notification');
-
-async function createNotification({ recipient, type, title, message, ride = null, data = {} }) {
-  return Notification.create({ recipient, type, title, message, ride, data });
-}
-
-module.exports = { createNotification };
+const Notification=require('../models/Notification');const {getIO}=require('../socket');function recipientRole(role){return role==='customer'||role==='captain'||role==='admin'?role:null;}async function createNotification({recipient,recipientRoleName=null,type,title,message,ride=null,data={}}){if(!recipient||!type||!title||!message)throw Object.assign(new Error('Invalid notification payload'),{code:'INVALID_NOTIFICATION',statusCode:400});const notification=await Notification.create({recipient,type,title,message,ride,data});const io=getIO();const role=recipientRole(recipientRoleName);if(io&&role)io.to(`${role}:${recipient.toString()}`).emit('notification:new',{id:notification._id.toString(),type:notification.type,title:notification.title,message:notification.message,ride:notification.ride,data:notification.data,createdAt:notification.createdAt});return notification;}module.exports={createNotification};
