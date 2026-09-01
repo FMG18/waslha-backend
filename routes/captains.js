@@ -1,10 +1,1 @@
-const express = require('express');
-const { auth, authorize } = require('../middleware/auth');
-const { getMe, updateProfile, updateAvailability, updateLocation } = require('../controllers/captainController');
-const router = express.Router();
-router.use(auth, authorize('captain'));
-router.get('/me', getMe);
-router.patch('/profile', updateProfile);
-router.patch('/status', updateAvailability);
-router.patch('/location', updateLocation);
-module.exports = router;
+const express=require('express');const {auth,authorize}=require('../middleware/auth');const {getMe,updateProfile,updateAvailability,updateLocation}=require('../controllers/captainController');const {list: listReviews}=require('../controllers/captainReviewsController');const router=express.Router();router.use(auth,authorize('captain'));router.get('/me',getMe);router.get('/reviews',listReviews);router.patch('/profile',updateProfile);router.patch('/status',updateAvailability);router.patch('/location',updateLocation);module.exports=router;
