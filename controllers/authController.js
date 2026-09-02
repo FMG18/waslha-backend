@@ -7,6 +7,7 @@ function fail(message, code='VALIDATION_ERROR', statusCode=400) { const e=new Er
 function normalizePhone(phone) { return String(phone||'').trim().replace(/[\s()-]/g,''); }
 
 async function register(req,res,next){
+  let user=null;
   try{
     const {name,password}=req.body; const phone=normalizePhone(req.body.phone);
     if(!name||name.trim().length<2||!phone||!password)throw fail('name, phone and password are required');
@@ -14,20 +15,25 @@ async function register(req,res,next){
     if(!/^\+?[1-9]\d{7,14}$/.test(phone))throw fail('Invalid phone number','INVALID_PHONE');
     const safeRole=req.body.role==='captain'?'captain':'customer';
     if(await User.exists({phone}))throw fail('Phone is already registered','PHONE_EXISTS',409);
-    const user=await User.create({name:name.trim(),phone,password,role:safeRole});
+    user=await User.create({name:name.trim(),phone,password,role:safeRole});
     if(safeRole==='captain'){
-      const incoming=req.body.vehicle||{};
-      await Captain.create({
-        user:user._id,
-        status:'pending',
-        availability:'offline',
-        vehicle:{
-          type:['taxi','motorcycle','delivery'].includes(incoming.type)?incoming.type:'taxi',
-          make:String(incoming.make||'').trim().slice(0,80),
-          model:String(incoming.model||'').trim().slice(0,80),
-          plateNumber:String(incoming.plateNumber||'').trim().slice(0,30)
-        }
-      });
+      try{
+        const incoming=req.body.vehicle||{};
+        await Captain.create({
+          user:user._id,
+          status:'pending',
+          availability:'offline',
+          vehicle:{
+            type:['taxi','motorcycle','delivery'].includes(incoming.type)?incoming.type:'taxi',
+            make:String(incoming.make||'').trim().slice(0,80),
+            model:String(incoming.model||'').trim().slice(0,80),
+            plateNumber:String(incoming.plateNumber||'').trim().slice(0,30)
+          }
+        });
+      }catch(error){
+        await User.deleteOne({_id:user._id}).catch(()=>{});
+        throw error;
+      }
     }
     return res.status(201).json({success:true,data:{user,token:signToken(user)}});
   }catch(err){next(err);}
