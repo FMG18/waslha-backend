@@ -14,7 +14,20 @@ async function register(req,res,next){
     const safeRole=req.body.role==='captain'?'captain':'customer';
     if(await User.exists({phone}))throw fail('Phone is already registered','PHONE_EXISTS',409);
     const user=await User.create({name:name.trim(),phone,password,role:safeRole});
-    if(safeRole==='captain')await Captain.create({user:user._id});
+    if(safeRole==='captain'){
+      const incoming=req.body.vehicle||{};
+      await Captain.create({
+        user:user._id,
+        status:'pending',
+        availability:'offline',
+        vehicle:{
+          type:['taxi','motorcycle','delivery'].includes(incoming.type)?incoming.type:'taxi',
+          make:String(incoming.make||'').trim().slice(0,80),
+          model:String(incoming.model||'').trim().slice(0,80),
+          plateNumber:String(incoming.plateNumber||'').trim().slice(0,30)
+        }
+      });
+    }
     return res.status(201).json({success:true,data:{user,token:signToken(user)}});
   }catch(err){next(err);}
 }
