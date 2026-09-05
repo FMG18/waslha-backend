@@ -4,6 +4,7 @@ const controller = require('../controllers/matchingController');
 
 const router = express.Router();
 router.use(auth);
+router.get('/available', authorize('captain'), controller.available);
 router.post('/rides/:id/start', authorize('customer', 'admin'), controller.begin);
 router.post('/rides/:id/claim', authorize('captain'), controller.claim);
 
