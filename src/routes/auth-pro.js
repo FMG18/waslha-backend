@@ -1,7 +1,8 @@
 import { Router } from 'express';
 import crypto from 'node:crypto';
 import { issueAccessToken } from '../auth/tokens.js';
-import { upsertUser } from '../services/userRepository.js';
+import { verifyGoogleIdToken } from '../auth/google.js';
+import { upsertGoogleUser, upsertUser } from '../services/userRepository.js';
 
 const router = Router();
 const pending = new Map();
@@ -28,14 +29,41 @@ router.post('/verify-code', async (req, res, next) => {
     const token = await issueAccessToken({ userId: user.id, role: user.role });
     res.json({
       success: true,
+      data: { userId: user.id, phone: user.phone, role: user.role, token }
+    });
+  } catch (error) { next(error); }
+});
+
+router.post('/google', async (req, res, next) => {
+  try {
+    const idToken = String(req.body?.idToken || '').trim();
+    if (!idToken) return res.status(400).json({ success: false, message: 'Google ID Token مفقود' });
+
+    const googleUser = await verifyGoogleIdToken(idToken);
+    const user = await upsertGoogleUser(googleUser);
+    const token = await issueAccessToken({ userId: user.id, role: user.role });
+
+    res.json({
+      success: true,
       data: {
         userId: user.id,
-        phone: user.phone,
+        phone: user.phone || '',
+        email: user.email,
+        name: user.name,
+        picture: user.picture || '',
         role: user.role,
         token
       }
     });
-  } catch (error) { next(error); }
+  } catch (error) {
+    if (error.code === 'GOOGLE_NOT_CONFIGURED') {
+      return res.status(503).json({ success: false, message: 'تسجيل الدخول باستخدام Google غير مفعّل على الخادم' });
+    }
+    if (error.code === 'GOOGLE_ACCOUNT_INVALID' || error.message?.includes('Wrong number of segments') || error.message?.includes('Invalid token')) {
+      return res.status(401).json({ success: false, message: 'حساب Google غير صالح أو غير موثّق' });
+    }
+    next(error);
+  }
 });
 
 export default router;
