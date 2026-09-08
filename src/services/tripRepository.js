@@ -1,0 +1,37 @@
+import crypto from 'node:crypto';
+import { getDatabase } from '../db/mongo.js';
+
+const memory = new Map();
+const collection = () => getDatabase()?.collection('trips');
+
+export async function createTrip(data) {
+  const trip = { id: `W-${crypto.randomBytes(5).toString('hex').toUpperCase()}`, createdAt: Date.now(), updatedAt: Date.now(), ...data };
+  const c = collection();
+  if (c) await c.insertOne({ ...trip, _id: trip.id }); else memory.set(trip.id, trip);
+  return trip;
+}
+
+export async function getTrip(id) {
+  const c = collection();
+  if (c) return c.findOne({ _id: id });
+  return memory.get(id) || null;
+}
+
+export async function listTrips(customerId) {
+  const c = collection();
+  if (c) return c.find(customerId ? { customerId } : {}).sort({ createdAt: -1 }).limit(100).toArray();
+  return [...memory.values()].filter((t) => !customerId || t.customerId === customerId).sort((a,b) => b.createdAt - a.createdAt);
+}
+
+export async function updateTrip(id, patch) {
+  const updated = { ...patch, updatedAt: Date.now() };
+  const c = collection();
+  if (c) {
+    await c.updateOne({ _id: id }, { $set: updated });
+    return getTrip(id);
+  }
+  const trip = memory.get(id);
+  if (!trip) return null;
+  Object.assign(trip, updated);
+  return trip;
+}
