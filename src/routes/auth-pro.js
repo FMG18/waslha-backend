@@ -59,7 +59,7 @@ router.post('/google', async (req, res, next) => {
     if (error.code === 'GOOGLE_NOT_CONFIGURED') {
       return res.status(503).json({ success: false, message: 'تسجيل الدخول باستخدام Google غير مفعّل على الخادم' });
     }
-    if (error.code === 'GOOGLE_ACCOUNT_INVALID' || error.message?.includes('Wrong number of segments') || error.message?.includes('Invalid token')) {
+    if (error.code === 'GOOGLE_TOKEN_INVALID' || error.code === 'GOOGLE_ACCOUNT_INVALID') {
       return res.status(401).json({ success: false, message: 'حساب Google غير صالح أو غير موثّق' });
     }
     next(error);
