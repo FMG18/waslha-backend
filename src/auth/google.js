@@ -10,10 +10,17 @@ export async function verifyGoogleIdToken(idToken) {
     throw error;
   }
 
-  const ticket = await client.verifyIdToken({
-    idToken,
-    audience: config.googleWebClientId
-  });
+  let ticket;
+  try {
+    ticket = await client.verifyIdToken({
+      idToken,
+      audience: config.googleWebClientId
+    });
+  } catch (cause) {
+    const error = new Error('Google ID Token verification failed', { cause });
+    error.code = 'GOOGLE_TOKEN_INVALID';
+    throw error;
+  }
 
   const payload = ticket.getPayload();
   if (!payload?.sub || !payload.email || payload.email_verified !== true) {
