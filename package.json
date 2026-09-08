@@ -1,11 +1,15 @@
 {
   "name": "waslha-backend",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "private": true,
   "description": "Waslha taxi platform backend",
   "type": "module",
   "engines": { "node": ">=22" },
-  "scripts": { "dev": "node --watch src/server.js", "start": "node src/server.js" },
+  "scripts": {
+    "dev": "node --watch src/server.js",
+    "start": "node src/server.js",
+    "test": "node --test"
+  },
   "dependencies": {
     "cors": "^2.8.5",
     "dotenv": "^16.6.1",
