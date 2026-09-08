@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { sortByDistance } from '../services/geo.js';
 
 const router = Router();
 const drivers = [
@@ -9,8 +10,13 @@ const drivers = [
 
 router.get('/nearby', (req, res) => {
   const type = req.query?.vehicleType;
+  const lat = Number(req.query?.lat);
+  const lng = Number(req.query?.lng);
   const available = drivers.filter((driver) => driver.available && (!type || driver.type === type));
-  res.json({ success: true, data: available, meta: { count: available.length } });
+  const data = Number.isFinite(lat) && Number.isFinite(lng)
+    ? sortByDistance({ lat, lng }, available)
+    : available;
+  res.json({ success: true, data, meta: { count: data.length } });
 });
 
 router.get('/:id', (req, res) => {
@@ -23,6 +29,19 @@ router.patch('/:id/availability', (req, res) => {
   const driver = drivers.find((item) => item.id === req.params.id);
   if (!driver) return res.status(404).json({ success: false, message: 'الكابتن غير موجود' });
   driver.available = Boolean(req.body?.available);
+  res.json({ success: true, data: driver });
+});
+
+router.patch('/:id/location', (req, res) => {
+  const driver = drivers.find((item) => item.id === req.params.id);
+  const lat = Number(req.body?.lat);
+  const lng = Number(req.body?.lng);
+  if (!driver) return res.status(404).json({ success: false, message: 'الكابتن غير موجود' });
+  if (![lat, lng].every(Number.isFinite) || lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+    return res.status(400).json({ success: false, message: 'الإحداثيات غير صالحة' });
+  }
+  driver.lat = lat;
+  driver.lng = lng;
   res.json({ success: true, data: driver });
 });
 
