@@ -11,6 +11,7 @@ import ratingRoutes from './routes/ratings.js';
 import pricingRoutes from './routes/pricing.js';
 import notificationRoutes from './routes/notifications.js';
 import supportRoutes from './routes/support.js';
+import updateRoutes from './routes/update.js';
 import { connectDatabase } from './db/mongo.js';
 
 dotenv.config();
@@ -22,9 +23,10 @@ app.use(cors({ origin: process.env.CORS_ORIGIN?.split(',').map((v) => v.trim()).
 app.use(express.json({ limit: '1mb' }));
 app.use(morgan('combined'));
 
-app.get('/health', (_req, res) => res.json({ success: true, service: 'waslha-backend', version: '1.4.0', status: 'ready', database: process.env.DATABASE_URL ? 'configured' : 'memory-fallback' }));
+app.get('/health', (_req, res) => res.json({ success: true, service: 'waslha-backend', version: '1.5.0', status: 'ready', database: process.env.DATABASE_URL ? 'configured' : 'memory-fallback' }));
 app.get('/api/v1', (_req, res) => res.json({ success: true, service: 'Waslha Taxi API', version: 'v1', mode: 'taxi-only' }));
 app.use('/api/v1/auth', authRoutes);
+app.use('/api/v1/update', updateRoutes);
 app.use('/api/v1/trips', tripRoutes);
 app.use('/api/v1/catalog', catalogRoutes);
 app.use('/api/v1/drivers', driverRoutes);
