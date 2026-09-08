@@ -1,25 +1,24 @@
 # وصلها — Waslha Backend
 
-Backend foundation for the Waslha taxi platform.
+Backend for the Waslha taxi-only Android application.
 
-## Product scope
-Waslha is being rebuilt as a taxi-only platform. Delivery/order workflows from the old system are intentionally excluded.
+## Current architecture
+- Express API under `/api/v1`
+- Phone OTP authentication
+- Signed JWT access tokens
+- MongoDB persistence with in-memory fallback for local development
+- Trip lifecycle/state machine
+- Driver discovery and availability
+- Fare estimation
+- Ratings, notifications and support modules
 
-## Planned domains
-- Authentication and phone verification
-- Passenger profiles
-- Captain profiles and vehicles
-- Online/offline availability
-- Nearby captain discovery
-- Trip lifecycle and state machine
-- Pricing and fare calculation
-- Live location updates
-- Ratings and trip history
-- Notifications
-- Admin authorization and operational controls
-
-## API
-The public API namespace is `/api/v1`. Health is available at `/health`.
+## Production environment
+Required for production authentication and persistence:
+- `JWT_SECRET` — minimum 32 characters
+- `DATABASE_URL` — MongoDB connection string
+- `DATABASE_NAME` — database name, defaults to `waslha`
+- `CORS_ORIGIN` — comma-separated allowed origins
+- `NODE_ENV=production`
 
 ## Branch policy
-**main is the only branch for this project.** No development branches are created.
+`main` is the only branch. No development branches are used.
