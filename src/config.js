@@ -7,5 +7,6 @@ export const config = Object.freeze({
   corsOrigins: process.env.CORS_ORIGIN?.split(',').map((value) => value.trim()).filter(Boolean) ?? [],
   databaseUrl: process.env.DATABASE_URL || '',
   jwtSecret: process.env.JWT_SECRET || '',
-  mapboxAccessToken: process.env.MAPBOX_ACCESS_TOKEN || ''
+  mapboxAccessToken: process.env.MAPBOX_ACCESS_TOKEN || '',
+  googleWebClientId: process.env.GOOGLE_WEB_CLIENT_ID || ''
 });
