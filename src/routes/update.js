@@ -43,14 +43,25 @@ router.get('/', async (req, res, next) => {
 
     const release = await response.json();
     const versionName = String(release.tag_name || '').replace(/^v/i, '') || '0.0.0';
-    const versionCode = Number(release.name?.match(/(?:code|versionCode)\s*[=:]\s*(\d+)/i)?.[1] || 0);
+    const versionCode = Number(versionName.replace(/\D/g, '') || 0);
     const apk = assetForAbi(release.assets || [], abi);
     if (!apk) {
       return res.json({ success: true, data: { updateAvailable: false, reason: 'no-apk' } });
     }
 
-    const checksum = checksumFor(release.assets || [], apk.name);
-    const updateAvailable = versionCode > currentCode || (currentCode === 0 && release.prerelease === false);
+    const checksumAsset = checksumFor(release.assets || [], apk.name);
+    let sha256 = null;
+    if (checksumAsset?.browser_download_url) {
+      const checksumResponse = await fetch(checksumAsset.browser_download_url, {
+        headers: { 'User-Agent': 'Waslha-Updater' }
+      });
+      if (checksumResponse.ok) {
+        const checksumText = await checksumResponse.text();
+        sha256 = checksumText.trim().split(/\s+/)[0].toLowerCase() || null;
+      }
+    }
+
+    const updateAvailable = versionCode > currentCode;
 
     res.set('Cache-Control', 'public, max-age=300');
     return res.json({
@@ -66,7 +77,7 @@ router.get('/', async (req, res, next) => {
           name: apk.name,
           size: apk.size,
           url: apk.browser_download_url,
-          sha256Url: checksum?.browser_download_url || null
+          sha256
         }
       }
     });
