@@ -3,7 +3,7 @@ import dotenv from 'dotenv';
 import express from 'express';
 import helmet from 'helmet';
 import morgan from 'morgan';
-import authRoutes from './routes/auth.js';
+import authRoutes from './routes/auth-pro.js';
 import tripRoutes from './routes/trips.js';
 import catalogRoutes from './routes/catalog.js';
 import driverRoutes from './routes/drivers.js';
@@ -11,6 +11,7 @@ import ratingRoutes from './routes/ratings.js';
 import pricingRoutes from './routes/pricing.js';
 import notificationRoutes from './routes/notifications.js';
 import supportRoutes from './routes/support.js';
+import { connectDatabase } from './db/mongo.js';
 
 dotenv.config();
 
@@ -21,7 +22,7 @@ app.use(cors({ origin: process.env.CORS_ORIGIN?.split(',').map((v) => v.trim()).
 app.use(express.json({ limit: '1mb' }));
 app.use(morgan('combined'));
 
-app.get('/health', (_req, res) => res.json({ success: true, service: 'waslha-backend', version: '1.3.0', status: 'ready' }));
+app.get('/health', (_req, res) => res.json({ success: true, service: 'waslha-backend', version: '1.4.0', status: 'ready', database: process.env.DATABASE_URL ? 'configured' : 'memory-fallback' }));
 app.get('/api/v1', (_req, res) => res.json({ success: true, service: 'Waslha Taxi API', version: 'v1', mode: 'taxi-only' }));
 app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/trips', tripRoutes);
@@ -33,9 +34,8 @@ app.use('/api/v1/notifications', notificationRoutes);
 app.use('/api/v1/support', supportRoutes);
 
 app.use((_req, res) => res.status(404).json({ success: false, message: 'المسار غير موجود' }));
-app.use((err, _req, res, _next) => {
-  console.error(err);
-  res.status(500).json({ success: false, message: 'حدث خطأ داخلي في الخادم' });
-});
+app.use((err, _req, res, _next) => { console.error(err); res.status(500).json({ success: false, message: 'حدث خطأ داخلي في الخادم' }); });
+
+void connectDatabase().catch((error) => console.error('Database connection failed:', error.message));
 
 export default app;
