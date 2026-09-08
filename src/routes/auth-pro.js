@@ -26,7 +26,15 @@ router.post('/verify-code', async (req, res, next) => {
     pending.delete(phone);
     const user = await upsertUser({ phone, role: 'customer' });
     const token = await issueAccessToken({ userId: user.id, role: user.role });
-    res.json({ success: true, data: { user, token } });
+    res.json({
+      success: true,
+      data: {
+        userId: user.id,
+        phone: user.phone,
+        role: user.role,
+        token
+      }
+    });
   } catch (error) { next(error); }
 });
 
