@@ -21,7 +21,13 @@ const coordinateDistanceKm = (a, b) => {
   return radiusKm * 2 * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h));
 };
 
-const estimate = (pickup, destination = null) => {
+const vehicleMultipliers = {
+  economy: 1,
+  comfort: 1.2,
+  family: 1.35
+};
+
+const estimate = (pickup, destination = null, vehicleType = 'economy') => {
   const straightLine = destination ? coordinateDistanceKm(pickup, destination) : null;
   const distanceKm = Math.max(
     1.2,
@@ -30,11 +36,14 @@ const estimate = (pickup, destination = null) => {
   const durationMin = Math.max(4, Math.round(distanceKm * 3.4 + 4));
   const base = 3500;
   const perKm = 900;
+  const multiplier = vehicleMultipliers[vehicleType] ?? 1;
+  const rawFare = (base + distanceKm * perKm) * multiplier;
+
   return {
     distanceKm: Number(distanceKm.toFixed(1)),
     durationMin,
     currency: 'SYP',
-    estimatedFare: Math.round(base + distanceKm * perKm)
+    estimatedFare: Math.round(rawFare / 250) * 250
   };
 };
 
@@ -54,7 +63,11 @@ router.get('/estimate', (req, res) => {
   } catch {
     return res.status(400).json({ success: false, message: 'صيغة الموقع غير صالحة' });
   }
-  res.json({ success: true, data: estimate(payload, payload?.destination) });
+
+  res.json({
+    success: true,
+    data: estimate(payload, payload?.destination, String(payload?.vehicleType || 'economy'))
+  });
 });
 
 router.get('/:id', async (req, res, next) => {
@@ -87,7 +100,7 @@ router.post('/', async (req, res, next) => {
       vehicleType,
       paymentMethod,
       scheduledAt,
-      ...estimate(pickup, destination),
+      ...estimate(pickup, destination, vehicleType),
       status: 'searching',
       driver: null
     });
