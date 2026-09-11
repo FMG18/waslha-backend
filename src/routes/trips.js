@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { canTransition, allowedTransitions } from '../services/tripState.js';
 import { createTrip, getTrip, listTrips, updateTrip } from '../services/tripRepository.js';
+import { normalizeTripRequest, assertEnum, TRIP_STATUSES, VEHICLE_TYPES, PAYMENT_METHODS } from '../domain/trip-contract.js';
 
 const router = Router();
 
@@ -49,10 +50,8 @@ const estimate = (pickup, destination = null, vehicleType = 'economy') => {
 
 router.get('/', async (req, res, next) => {
   try {
-    res.json({
-      success: true,
-      data: await listTrips(req.query.customerId ? String(req.query.customerId) : null)
-    });
+    const customerId = req.query.customerId ? String(req.query.customerId).trim() : null;
+    res.json({ success: true, data: await listTrips(customerId) });
   } catch (error) { next(error); }
 });
 
@@ -64,10 +63,18 @@ router.get('/estimate', (req, res) => {
     return res.status(400).json({ success: false, message: 'صيغة الموقع غير صالحة' });
   }
 
-  res.json({
-    success: true,
-    data: estimate(payload, payload?.destination, String(payload?.vehicleType || 'economy'))
-  });
+  try {
+    const pickup = payload.pickup ?? payload;
+    const destination = payload.destination ?? null;
+    const vehicleType = String(payload.vehicleType || 'economy').toLowerCase();
+    assertEnum(vehicleType, VEHICLE_TYPES, 'نوع السيارة');
+    if (destination) {
+      return res.json({ success: true, data: estimate(pickup, destination, vehicleType) });
+    }
+    return res.json({ success: true, data: estimate(pickup, null, vehicleType) });
+  } catch (error) {
+    return res.status(error.statusCode || 400).json({ success: false, message: error.message });
+  }
 });
 
 router.get('/:id', async (req, res, next) => {
@@ -80,40 +87,30 @@ router.get('/:id', async (req, res, next) => {
 
 router.post('/', async (req, res, next) => {
   try {
-    const {
-      customerId = 'guest',
-      pickup,
-      destination,
-      vehicleType = 'economy',
-      paymentMethod = 'cash',
-      scheduledAt = null
-    } = req.body ?? {};
-
-    if (!pickup || !destination) {
-      return res.status(400).json({ success: false, message: 'موقع الانطلاق والوجهة مطلوبان' });
-    }
-
+    const normalized = normalizeTripRequest(req.body ?? {});
     const trip = await createTrip({
-      customerId: String(customerId),
-      pickup,
-      destination,
-      vehicleType,
-      paymentMethod,
-      scheduledAt,
-      ...estimate(pickup, destination, vehicleType),
-      status: 'searching',
-      driver: null
+      ...normalized,
+      ...estimate(normalized.pickup, normalized.destination, normalized.vehicleType),
+      status: TRIP_STATUSES[0],
+      driver: null,
+      statusHistory: [{ status: TRIP_STATUSES[0], actor: 'customer', at: Date.now(), metadata: null }]
     });
 
     res.status(201).json({ success: true, data: trip });
-  } catch (error) { next(error); }
+  } catch (error) {
+    if (error.code === 'VALIDATION_ERROR') {
+      return res.status(error.statusCode || 400).json({ success: false, message: error.message });
+    }
+    next(error);
+  }
 });
 
 router.patch('/:id/status', async (req, res, next) => {
   try {
     const trip = await getTrip(req.params.id);
-    const nextStatus = String(req.body?.status ?? '');
+    const nextStatus = String(req.body?.status ?? '').toLowerCase();
     if (!trip) return res.status(404).json({ success: false, message: 'الرحلة غير موجودة' });
+    assertEnum(nextStatus, TRIP_STATUSES, 'حالة الرحلة');
     if (!canTransition(trip.status, nextStatus)) {
       return res.status(409).json({
         success: false,
@@ -122,9 +119,18 @@ router.patch('/:id/status', async (req, res, next) => {
         allowed: allowedTransitions(trip.status)
       });
     }
-    const updated = await updateTrip(trip.id, { status: nextStatus });
+    const updated = await updateTrip(trip.id, {
+      status: nextStatus,
+      statusChangedAt: Date.now(),
+      statusActor: String(req.body?.actor || 'system').slice(0, 80)
+    });
     res.json({ success: true, data: updated });
-  } catch (error) { next(error); }
+  } catch (error) {
+    if (error.code === 'VALIDATION_ERROR') {
+      return res.status(400).json({ success: false, message: error.message });
+    }
+    next(error);
+  }
 });
 
 router.post('/:id/assign-driver', async (req, res, next) => {
@@ -133,7 +139,12 @@ router.post('/:id/assign-driver', async (req, res, next) => {
     if (!trip) return res.status(404).json({ success: false, message: 'الرحلة غير موجودة' });
     if (trip.status !== 'searching') return res.status(409).json({ success: false, message: 'الرحلة ليست بمرحلة البحث' });
     const driver = req.body?.driver || { id: String(req.body?.driverId || 'unknown') };
-    const updated = await updateTrip(trip.id, { driver, status: 'driver_assigned' });
+    const updated = await updateTrip(trip.id, {
+      driver,
+      status: 'driver_assigned',
+      statusChangedAt: Date.now(),
+      statusActor: 'dispatch'
+    });
     res.json({ success: true, data: updated });
   } catch (error) { next(error); }
 });
@@ -145,6 +156,8 @@ router.post('/:id/cancel', async (req, res, next) => {
     if (!canTransition(trip.status, 'cancelled')) return res.status(409).json({ success: false, message: 'لا يمكن إلغاء هذه الرحلة حالياً' });
     const updated = await updateTrip(trip.id, {
       status: 'cancelled',
+      statusChangedAt: Date.now(),
+      statusActor: 'customer',
       cancelReason: String(req.body?.reason || 'customer_request').slice(0, 120)
     });
     res.json({ success: true, data: updated });
