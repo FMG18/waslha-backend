@@ -24,18 +24,14 @@ export async function secureCustomerRoutes(req, res, next) {
   await requireApiAuth(req, res, async () => {
     const userId = String(req.auth.userId);
     const path = req.path || '';
+    const base = req.baseUrl || '';
 
-    if (req.baseUrl.endsWith('/trips')) {
+    if (base.endsWith('/trips')) {
       const privileged = /\/(dispatch|assign-driver|status)$/.test(path);
       if (req.auth.role === 'customer' && privileged) return deny(res, 403, 'ليس لديك صلاحية لهذا الإجراء');
-
       if (req.auth.role === 'customer') {
-        if (req.method === 'GET' && (path === '/' || path === '')) {
-          req.query.customerId = userId;
-        } else if (req.method === 'POST' && (path === '/' || path === '')) {
-          req.body = { ...(req.body || {}), customerId: userId };
-        }
-
+        if (req.method === 'GET' && (path === '/' || path === '')) req.query.customerId = userId;
+        else if (req.method === 'POST' && (path === '/' || path === '')) req.body = { ...(req.body || {}), customerId: userId };
         const match = path.match(/^\/([^/]+)/);
         if (match && match[1] && match[1] !== 'estimate') {
           const trip = await getTrip(match[1]);
@@ -44,15 +40,22 @@ export async function secureCustomerRoutes(req, res, next) {
       }
     }
 
-    if (req.baseUrl.endsWith('/notifications') && req.auth.role === 'customer') {
+    if (base.endsWith('/notifications') && req.auth.role === 'customer') {
       if (req.method === 'POST') return deny(res, 403, 'إنشاء إشعارات الزبون غير مسموح');
       req.query.userId = userId;
       if (req.body && typeof req.body === 'object') req.body.userId = userId;
     }
 
-    if (req.baseUrl.endsWith('/ratings') && req.auth.role === 'customer' && req.method === 'POST') {
+    if (base.endsWith('/ratings') && req.auth.role === 'customer' && req.method === 'POST') {
       req.body = { ...(req.body || {}), customerId: userId };
     }
+
+    if (base.endsWith('/support') && req.auth.role === 'customer') {
+      req.query.userId = userId;
+      if (req.body && typeof req.body === 'object') req.body.userId = userId;
+    }
+
+    if (base.endsWith('/drivers') && req.auth.role === 'customer') return deny(res, 403, 'ليس لديك صلاحية للوصول إلى بيانات الكباتن');
 
     next();
   });
