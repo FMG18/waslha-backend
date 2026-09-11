@@ -1,5 +1,7 @@
 import crypto from 'node:crypto';
 import { getDatabase } from '../db/mongo.js';
+import { getDeviceTokens, removeDeviceTokens } from './deviceTokenRepository.js';
+import { sendPushToUser } from './fcm.js';
 
 const memory = new Map();
 const collection = () => getDatabase()?.collection('notifications');
@@ -22,6 +24,19 @@ export async function createNotification({ userId, title, body, type = 'trip', t
     list.unshift(notification);
     memory.set(notification.userId, list.slice(0, 100));
   }
+
+  const tokens = await getDeviceTokens(notification.userId);
+  if (tokens.length) {
+    void sendPushToUser({
+      tokens,
+      title: notification.title,
+      body: notification.body,
+      data: { notificationId: notification.id, type: notification.type, tripId: notification.tripId || '' }
+    }).then(({ invalidTokens }) => removeDeviceTokens(notification.userId, invalidTokens)).catch((error) => {
+      console.warn('Push notification failed:', error.message);
+    });
+  }
+
   return notification;
 }
 
