@@ -25,7 +25,9 @@ async function ensureIndexes() {
     db.collection('trips').createIndex({ status: 1, createdAt: -1 }),
     db.collection('drivers').createIndex({ available: 1, vehicleType: 1 }),
     db.collection('ratings').createIndex({ driverId: 1, createdAt: -1 }),
-    db.collection('notifications').createIndex({ userId: 1, createdAt: -1 })
+    db.collection('notifications').createIndex({ userId: 1, createdAt: -1 }),
+    db.collection('deviceTokens').createIndex({ userId: 1, updatedAt: -1 }),
+    db.collection('deviceTokens').createIndex({ userId: 1, token: 1 }, { unique: true })
   ]);
 }
 
