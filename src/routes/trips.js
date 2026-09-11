@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { canTransition, allowedTransitions } from '../services/tripState.js';
 import { createTrip, getTrip, listTrips, updateTrip } from '../services/tripRepository.js';
-import { normalizeTripRequest, assertEnum, TRIP_STATUSES, VEHICLE_TYPES, PAYMENT_METHODS } from '../domain/trip-contract.js';
+import { normalizeTripRequest, assertEnum, TRIP_STATUSES, VEHICLE_TYPES } from '../domain/trip-contract.js';
 
 const router = Router();
 
