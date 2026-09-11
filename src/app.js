@@ -28,7 +28,6 @@ app.use(morgan('combined'));
 app.get('/health', (_req, res) => res.json({ success: true, service: 'waslha-backend', version: '1.5.0', status: 'ready', database: process.env.DATABASE_URL ? 'configured' : 'memory-fallback' }));
 app.get('/api/v1', (_req, res) => res.json({ success: true, service: 'Waslha Taxi API', version: 'v1', mode: 'taxi-only' }));
 
-// Authentication endpoints remain public; protected API data routes require a valid JWT.
 app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/update', updateRoutes);
 app.use('/api/v1/trips', secureCustomerRoutes, tripRoutes);
