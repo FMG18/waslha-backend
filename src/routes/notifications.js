@@ -1,36 +1,34 @@
 import { Router } from 'express';
-import crypto from 'node:crypto';
+import { createNotification, listNotifications, markNotificationRead } from '../services/notificationRepository.js';
 
 const router = Router();
-const notifications = new Map();
 
-router.get('/', (req, res) => {
-  const userId = String(req.query.userId || 'guest');
-  const data = notifications.get(userId) || [
-    { id: 'welcome', title: 'أهلاً بك في وصلها', body: 'ابدأ رحلتك الأولى معنا بسهولة وأمان.', type: 'system', read: false, createdAt: Date.now() }
-  ];
-  res.json({ success: true, data });
+router.get('/', async (req, res, next) => {
+  try {
+    const userId = String(req.query.userId || '').trim();
+    if (!userId) return res.status(400).json({ success: false, message: 'معرّف المستخدم مطلوب' });
+    const limit = Math.min(100, Math.max(1, Number(req.query.limit || 50)));
+    res.json({ success: true, data: await listNotifications(userId, limit) });
+  } catch (error) { next(error); }
 });
 
-router.post('/', (req, res) => {
-  const { userId = 'guest', title, body, type = 'system' } = req.body || {};
-  if (!title || !body) return res.status(400).json({ success: false, message: 'العنوان والنص مطلوبان' });
-  const item = { id: crypto.randomUUID(), title: String(title).slice(0, 120), body: String(body).slice(0, 500), type, read: false, createdAt: Date.now() };
-  const list = notifications.get(userId) || [];
-  list.unshift(item);
-  notifications.set(userId, list.slice(0, 50));
-  res.status(201).json({ success: true, data: item });
+router.post('/', async (req, res, next) => {
+  try {
+    const { userId, title, body, type = 'system', tripId = null } = req.body || {};
+    if (!userId || !title || !body) return res.status(400).json({ success: false, message: 'المستخدم والعنوان والنص مطلوبة' });
+    const item = await createNotification({ userId, title, body, type, tripId });
+    res.status(201).json({ success: true, data: item });
+  } catch (error) { next(error); }
 });
 
-router.patch('/:id/read', (req, res) => {
-  for (const list of notifications.values()) {
-    const item = list.find((entry) => entry.id === req.params.id);
-    if (item) {
-      item.read = true;
-      return res.json({ success: true, data: item });
-    }
-  }
-  res.status(404).json({ success: false, message: 'الإشعار غير موجود' });
+router.patch('/:id/read', async (req, res, next) => {
+  try {
+    const userId = String(req.body?.userId || req.query?.userId || '').trim();
+    if (!userId) return res.status(400).json({ success: false, message: 'معرّف المستخدم مطلوب' });
+    const found = await markNotificationRead(userId, req.params.id);
+    if (!found) return res.status(404).json({ success: false, message: 'الإشعار غير موجود' });
+    res.json({ success: true, data: { id: req.params.id, read: true } });
+  } catch (error) { next(error); }
 });
 
 export default router;
