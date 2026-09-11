@@ -5,6 +5,7 @@ import helmet from 'helmet';
 import morgan from 'morgan';
 import authRoutes from './routes/auth-pro.js';
 import tripRoutes from './routes/trips.js';
+import captainRoutes from './routes/captain.js';
 import catalogRoutes from './routes/catalog.js';
 import driverRoutes from './routes/drivers.js';
 import ratingRoutes from './routes/ratings.js';
@@ -30,6 +31,7 @@ app.get('/api/v1', (_req, res) => res.json({ success: true, service: 'Waslha Tax
 
 app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/update', updateRoutes);
+app.use('/api/v1/captain', captainRoutes);
 app.use('/api/v1/trips', secureCustomerRoutes, tripRoutes);
 app.use('/api/v1/catalog', catalogRoutes);
 app.use('/api/v1/drivers', requireApiAuth, driverRoutes);
