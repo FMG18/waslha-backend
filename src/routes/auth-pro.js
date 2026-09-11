@@ -7,6 +7,9 @@ import { rateLimit } from '../middleware/rate-limit.js';
 
 const router = Router();
 const pending = new Map();
+const DEMO_CAPTAIN_PHONE = '+9647700000099';
+const DEMO_CAPTAIN_CODE = '246810';
+const DEMO_CAPTAIN_ID = 'demo-captain-001';
 const otpRequestLimit = rateLimit({ windowMs: 60_000, max: 5, key: (req) => `otp-request:${req.ip || 'unknown'}` });
 const otpVerifyLimit = rateLimit({ windowMs: 60_000, max: 12, key: (req) => `otp-verify:${req.ip || 'unknown'}` });
 const googleLoginLimit = rateLimit({ windowMs: 60_000, max: 12, key: (req) => `google:${req.ip || 'unknown'}` });
@@ -14,9 +17,17 @@ const googleLoginLimit = rateLimit({ windowMs: 60_000, max: 12, key: (req) => `g
 router.post('/request-code', otpRequestLimit, (req, res) => {
   const phone = String(req.body?.phone || '').replace(/\s+/g, '').trim();
   if (!/^\+?[0-9]{8,15}$/.test(phone)) return res.status(400).json({ success: false, message: 'رقم الهاتف غير صالح' });
-  const code = process.env.NODE_ENV === 'production' ? String(crypto.randomInt(100000, 1000000)) : '123456';
+  const isDemoCaptain = phone === DEMO_CAPTAIN_PHONE;
+  const code = isDemoCaptain
+    ? DEMO_CAPTAIN_CODE
+    : (process.env.NODE_ENV === 'production' ? String(crypto.randomInt(100000, 1000000)) : '123456');
   pending.set(phone, { code, expiresAt: Date.now() + 300000, attempts: 0 });
-  res.json({ success: true, message: 'تم إرسال رمز التحقق', expiresIn: 300, ...(process.env.NODE_ENV !== 'production' ? { devCode: code } : {}) });
+  res.json({
+    success: true,
+    message: 'تم إرسال رمز التحقق',
+    expiresIn: 300,
+    ...(process.env.NODE_ENV !== 'production' || isDemoCaptain ? { devCode: code } : {})
+  });
 });
 
 router.post('/verify-code', otpVerifyLimit, async (req, res, next) => {
@@ -29,9 +40,13 @@ router.post('/verify-code', otpVerifyLimit, async (req, res, next) => {
       return res.status(400).json({ success: false, message: 'رمز التحقق غير صحيح أو منتهي' });
     }
     pending.delete(phone);
-    const user = await upsertUser({ phone, role: 'customer' });
-    const token = await issueAccessToken({ userId: user.id, role: user.role });
-    res.json({ success: true, data: { userId: user.id, phone: user.phone, role: user.role, token } });
+    const isDemoCaptain = phone === DEMO_CAPTAIN_PHONE;
+    const user = await upsertUser({ phone, role: isDemoCaptain ? 'driver' : 'customer' });
+    const normalizedUser = isDemoCaptain
+      ? { ...user, id: DEMO_CAPTAIN_ID, role: 'driver', name: user.name || 'كابتن وصلها التجريبي' }
+      : user;
+    const token = await issueAccessToken({ userId: normalizedUser.id, role: normalizedUser.role });
+    res.json({ success: true, data: { userId: normalizedUser.id, phone: normalizedUser.phone, role: normalizedUser.role, token, name: normalizedUser.name } });
   } catch (error) { next(error); }
 });
 
