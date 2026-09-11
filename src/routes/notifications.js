@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { createNotification, listNotifications, markNotificationRead } from '../services/notificationRepository.js';
+import { registerDeviceToken } from '../services/deviceTokenRepository.js';
 
 const router = Router();
 
@@ -9,6 +10,17 @@ router.get('/', async (req, res, next) => {
     if (!userId) return res.status(400).json({ success: false, message: 'معرّف المستخدم مطلوب' });
     const limit = Math.min(100, Math.max(1, Number(req.query.limit || 50)));
     res.json({ success: true, data: await listNotifications(userId, limit) });
+  } catch (error) { next(error); }
+});
+
+router.post('/device-token', async (req, res, next) => {
+  try {
+    const userId = String(req.auth?.userId || '').trim();
+    const token = String(req.body?.token || '').trim();
+    if (!userId || !token) return res.status(400).json({ success: false, message: 'رمز الجهاز مطلوب' });
+    const result = await registerDeviceToken(userId, token);
+    if (!result.registered) return res.status(404).json({ success: false, message: 'حساب المستخدم غير موجود' });
+    res.json({ success: true, data: result });
   } catch (error) { next(error); }
 });
 
