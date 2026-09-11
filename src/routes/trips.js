@@ -4,6 +4,7 @@ import { createTrip, getTrip, listTrips, updateTrip } from '../services/tripRepo
 import { normalizeTripRequest, assertEnum, TRIP_STATUSES, VEHICLE_TYPES } from '../domain/trip-contract.js';
 import { getDriver, getNearestAvailableDriver, reserveDriver, releaseDriver } from '../services/driverRegistry.js';
 import { calculateFare, cancellationPolicy } from '../services/pricing.js';
+import { createNotification } from '../services/notificationRepository.js';
 
 const router = Router();
 
@@ -28,6 +29,17 @@ const appendStatusHistory = (trip, status, actor, metadata = null) => [
   ...(Array.isArray(trip.statusHistory) ? trip.statusHistory : []),
   { status, actor: String(actor || 'system').slice(0, 80), at: Date.now(), metadata }
 ];
+
+const statusNotification = (status) => {
+  const messages = {
+    searching: ['بدأ البحث عن كابتن', 'جاري البحث عن كابتن مناسب لرحلتك.'],
+    driver_assigned: ['تم العثور على كابتن', 'تم تعيين كابتن لرحلتك.'],
+    arriving: ['الكابتن في الطريق', 'الكابتن متجه إلى نقطة الانطلاق.'],
+    in_progress: ['بدأت الرحلة', 'رحلتك الآن قيد التنفيذ.'],
+    completed: ['اكتملت الرحلة', 'انتهت رحلتك بنجاح.']
+  };
+  return messages[status] || null;
+};
 
 router.get('/', async (req, res, next) => {
   try {
@@ -95,6 +107,7 @@ router.post('/', async (req, res, next) => {
       statusChangedAt: now, statusActor: 'customer',
       statusHistory: [{ status: TRIP_STATUSES[0], actor: 'customer', at: now, metadata: null }]
     });
+    await createNotification({ userId: normalized.customerId, tripId: trip.id, type: 'trip', title: 'تم استلام طلب الرحلة', body: 'جاري البحث عن كابتن لرحلتك.' });
     res.status(201).json({ success: true, data: trip });
   } catch (error) {
     if (error.code === 'VALIDATION_ERROR') return res.status(error.statusCode || 400).json({ success: false, message: error.message });
@@ -113,6 +126,8 @@ router.patch('/:id/status', async (req, res, next) => {
     const now = Date.now();
     const updated = await updateTrip(trip.id, { status: nextStatus, statusChangedAt: now, statusActor: actor, statusHistory: appendStatusHistory(trip, nextStatus, actor) });
     if (nextStatus === 'completed' || nextStatus === 'cancelled') if (trip.driver?.id) releaseDriver(String(trip.driver.id));
+    const notice = statusNotification(nextStatus);
+    if (notice) await createNotification({ userId: trip.customerId, tripId: trip.id, type: 'trip', title: notice[0], body: notice[1] });
     res.json({ success: true, data: updated });
   } catch (error) {
     if (error.code === 'VALIDATION_ERROR') return res.status(400).json({ success: false, message: error.message });
@@ -134,6 +149,7 @@ router.post('/:id/dispatch', async (req, res, next) => {
     if (!reserved) return res.status(409).json({ success: false, message: 'الكابتن لم يعد متاحًا، حاول مرة أخرى' });
     const now = Date.now();
     const updated = await updateTrip(trip.id, { driver: reserved, status: 'driver_assigned', statusChangedAt: now, statusActor: 'dispatch', statusHistory: appendStatusHistory(trip, 'driver_assigned', 'dispatch', { driverId: reserved.id }) });
+    await createNotification({ userId: trip.customerId, tripId: trip.id, type: 'trip', title: 'تم العثور على كابتن', body: `${reserved.name || 'الكابتن'} في طريقه لاستلام الرحلة.` });
     res.json({ success: true, data: updated });
   } catch (error) { next(error); }
 });
@@ -152,6 +168,7 @@ router.post('/:id/assign-driver', async (req, res, next) => {
     if (!reserved) return res.status(409).json({ success: false, message: 'الكابتن لم يعد متاحًا' });
     const now = Date.now();
     const updated = await updateTrip(trip.id, { driver: reserved, status: 'driver_assigned', statusChangedAt: now, statusActor: 'dispatch', statusHistory: appendStatusHistory(trip, 'driver_assigned', 'dispatch', { driverId: reserved.id }) });
+    await createNotification({ userId: trip.customerId, tripId: trip.id, type: 'trip', title: 'تم العثور على كابتن', body: `${reserved.name || 'الكابتن'} تم تعيينه لرحلتك.` });
     res.json({ success: true, data: updated });
   } catch (error) { next(error); }
 });
@@ -170,6 +187,7 @@ router.post('/:id/cancel', async (req, res, next) => {
       statusHistory: appendStatusHistory(trip, 'cancelled', 'customer', { reason, fee: policy.fee })
     });
     if (trip.driver?.id) releaseDriver(String(trip.driver.id));
+    await createNotification({ userId: trip.customerId, tripId: trip.id, type: 'trip', title: 'تم إلغاء الرحلة', body: policy.fee > 0 ? `تم إلغاء الرحلة. رسوم الإلغاء: ${policy.fee} ل.س.` : 'تم إلغاء الرحلة بدون رسوم.' });
     res.json({ success: true, data: updated });
   } catch (error) { next(error); }
 });
