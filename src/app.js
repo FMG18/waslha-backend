@@ -14,6 +14,7 @@ import supportRoutes from './routes/support.js';
 import updateRoutes from './routes/update.js';
 import placesRoutes from './routes/places.js';
 import { connectDatabase } from './db/mongo.js';
+import { requireApiAuth, secureCustomerRoutes } from './middleware/route-security.js';
 
 dotenv.config();
 
@@ -26,16 +27,18 @@ app.use(morgan('combined'));
 
 app.get('/health', (_req, res) => res.json({ success: true, service: 'waslha-backend', version: '1.5.0', status: 'ready', database: process.env.DATABASE_URL ? 'configured' : 'memory-fallback' }));
 app.get('/api/v1', (_req, res) => res.json({ success: true, service: 'Waslha Taxi API', version: 'v1', mode: 'taxi-only' }));
+
+// Authentication endpoints remain public; protected API data routes require a valid JWT.
 app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/update', updateRoutes);
-app.use('/api/v1/trips', tripRoutes);
+app.use('/api/v1/trips', secureCustomerRoutes, tripRoutes);
 app.use('/api/v1/catalog', catalogRoutes);
-app.use('/api/v1/drivers', driverRoutes);
-app.use('/api/v1/ratings', ratingRoutes);
+app.use('/api/v1/drivers', requireApiAuth, driverRoutes);
+app.use('/api/v1/ratings', secureCustomerRoutes, ratingRoutes);
 app.use('/api/v1/pricing', pricingRoutes);
-app.use('/api/v1/notifications', notificationRoutes);
-app.use('/api/v1/support', supportRoutes);
-app.use('/api/v1/places', placesRoutes);
+app.use('/api/v1/notifications', secureCustomerRoutes, notificationRoutes);
+app.use('/api/v1/support', secureCustomerRoutes, supportRoutes);
+app.use('/api/v1/places', secureCustomerRoutes, placesRoutes);
 
 app.use((_req, res) => res.status(404).json({ success: false, message: 'المسار غير موجود' }));
 app.use((err, _req, res, _next) => { console.error(err); res.status(500).json({ success: false, message: 'حدث خطأ داخلي في الخادم' }); });
