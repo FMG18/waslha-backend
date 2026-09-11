@@ -12,6 +12,7 @@ import pricingRoutes from './routes/pricing.js';
 import notificationRoutes from './routes/notifications.js';
 import supportRoutes from './routes/support.js';
 import updateRoutes from './routes/update.js';
+import placesRoutes from './routes/places.js';
 import { connectDatabase } from './db/mongo.js';
 
 dotenv.config();
@@ -34,6 +35,7 @@ app.use('/api/v1/ratings', ratingRoutes);
 app.use('/api/v1/pricing', pricingRoutes);
 app.use('/api/v1/notifications', notificationRoutes);
 app.use('/api/v1/support', supportRoutes);
+app.use('/api/v1/places', placesRoutes);
 
 app.use((_req, res) => res.status(404).json({ success: false, message: 'المسار غير موجود' }));
 app.use((err, _req, res, _next) => { console.error(err); res.status(500).json({ success: false, message: 'حدث خطأ داخلي في الخادم' }); });
