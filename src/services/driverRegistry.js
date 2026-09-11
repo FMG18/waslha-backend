@@ -1,9 +1,9 @@
 import { sortByDistance } from './geo.js';
 
 const drivers = [
-  { id: 'cap-101', name: 'أحمد', phone: '+963000000101', rating: 4.9, vehicle: 'Toyota Corolla', plate: '1234', type: 'economy', lat: 33.5138, lng: 36.2765, available: true },
-  { id: 'cap-102', name: 'محمد', phone: '+963000000102', rating: 4.8, vehicle: 'Hyundai Elantra', plate: '5682', type: 'economy', lat: 33.5180, lng: 36.2892, available: true },
-  { id: 'cap-203', name: 'سامر', phone: '+963000000203', rating: 4.9, vehicle: 'Kia Sportage', plate: '9041', type: 'comfort', lat: 33.5050, lng: 36.2940, available: true }
+  { id: 'cap-101', name: 'أحمد', phone: null, rating: 4.9, vehicle: 'Toyota Corolla', plate: '1234', type: 'economy', lat: 33.5138, lng: 36.2765, available: true },
+  { id: 'cap-102', name: 'محمد', phone: null, rating: 4.8, vehicle: 'Hyundai Elantra', plate: '5682', type: 'economy', lat: 33.5180, lng: 36.2892, available: true },
+  { id: 'cap-203', name: 'سامر', phone: null, rating: 4.9, vehicle: 'Kia Sportage', plate: '9041', type: 'comfort', lat: 33.5050, lng: 36.2940, available: true }
 ];
 
 const clone = (driver) => driver ? { ...driver } : null;
