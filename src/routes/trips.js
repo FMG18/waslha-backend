@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { canTransition, allowedTransitions } from '../services/tripState.js';
 import { createTrip, getTrip, listTrips, updateTrip } from '../services/tripRepository.js';
 import { normalizeTripRequest, assertEnum, TRIP_STATUSES, VEHICLE_TYPES } from '../domain/trip-contract.js';
+import { getDriver, getNearestAvailableDriver, reserveDriver, releaseDriver } from '../services/driverRegistry.js';
 
 const router = Router();
 
@@ -48,6 +49,11 @@ const estimate = (pickup, destination = null, vehicleType = 'economy') => {
   };
 };
 
+const appendStatusHistory = (trip, status, actor, metadata = null) => [
+  ...(Array.isArray(trip.statusHistory) ? trip.statusHistory : []),
+  { status, actor: String(actor || 'system').slice(0, 80), at: Date.now(), metadata }
+];
+
 router.get('/', async (req, res, next) => {
   try {
     const customerId = req.query.customerId ? String(req.query.customerId).trim() : null;
@@ -68,10 +74,7 @@ router.get('/estimate', (req, res) => {
     const destination = payload.destination ?? null;
     const vehicleType = String(payload.vehicleType || 'economy').toLowerCase();
     assertEnum(vehicleType, VEHICLE_TYPES, 'نوع السيارة');
-    if (destination) {
-      return res.json({ success: true, data: estimate(pickup, destination, vehicleType) });
-    }
-    return res.json({ success: true, data: estimate(pickup, null, vehicleType) });
+    return res.json({ success: true, data: estimate(pickup, destination, vehicleType) });
   } catch (error) {
     return res.status(error.statusCode || 400).json({ success: false, message: error.message });
   }
@@ -93,6 +96,8 @@ router.post('/', async (req, res, next) => {
       ...estimate(normalized.pickup, normalized.destination, normalized.vehicleType),
       status: TRIP_STATUSES[0],
       driver: null,
+      statusChangedAt: Date.now(),
+      statusActor: 'customer',
       statusHistory: [{ status: TRIP_STATUSES[0], actor: 'customer', at: Date.now(), metadata: null }]
     });
 
@@ -119,11 +124,19 @@ router.patch('/:id/status', async (req, res, next) => {
         allowed: allowedTransitions(trip.status)
       });
     }
+
+    const actor = String(req.body?.actor || 'system').slice(0, 80);
     const updated = await updateTrip(trip.id, {
       status: nextStatus,
       statusChangedAt: Date.now(),
-      statusActor: String(req.body?.actor || 'system').slice(0, 80)
+      statusActor: actor,
+      statusHistory: appendStatusHistory(trip, nextStatus, actor, null)
     });
+
+    if (nextStatus === 'completed' || nextStatus === 'cancelled') {
+      if (trip.driver?.id) releaseDriver(String(trip.driver.id));
+    }
+
     res.json({ success: true, data: updated });
   } catch (error) {
     if (error.code === 'VALIDATION_ERROR') {
@@ -133,17 +146,57 @@ router.patch('/:id/status', async (req, res, next) => {
   }
 });
 
+router.post('/:id/dispatch', async (req, res, next) => {
+  try {
+    const trip = await getTrip(req.params.id);
+    if (!trip) return res.status(404).json({ success: false, message: 'الرحلة غير موجودة' });
+    if (trip.status !== 'searching') {
+      return res.status(409).json({ success: false, message: 'الرحلة ليست بمرحلة البحث عن كابتن' });
+    }
+
+    const preferredDriverId = req.body?.driverId ? String(req.body.driverId) : null;
+    let driver = preferredDriverId ? getDriver(preferredDriverId) : null;
+    if (driver && (!driver.available || driver.type !== trip.vehicleType)) driver = null;
+    if (!driver) driver = getNearestAvailableDriver(trip.pickup, trip.vehicleType);
+    if (!driver) return res.status(409).json({ success: false, message: 'لا يوجد كابتن متاح حاليًا' });
+
+    const reserved = reserveDriver(driver.id);
+    if (!reserved) return res.status(409).json({ success: false, message: 'الكابتن لم يعد متاحًا، حاول مرة أخرى' });
+
+    const updated = await updateTrip(trip.id, {
+      driver: reserved,
+      status: 'driver_assigned',
+      statusChangedAt: Date.now(),
+      statusActor: 'dispatch',
+      statusHistory: appendStatusHistory(trip, 'driver_assigned', 'dispatch', { driverId: reserved.id })
+    });
+
+    res.json({ success: true, data: updated });
+  } catch (error) { next(error); }
+});
+
 router.post('/:id/assign-driver', async (req, res, next) => {
   try {
     const trip = await getTrip(req.params.id);
     if (!trip) return res.status(404).json({ success: false, message: 'الرحلة غير موجودة' });
     if (trip.status !== 'searching') return res.status(409).json({ success: false, message: 'الرحلة ليست بمرحلة البحث' });
-    const driver = req.body?.driver || { id: String(req.body?.driverId || 'unknown') };
+
+    const driverId = String(req.body?.driverId || req.body?.driver?.id || '');
+    if (!driverId) return res.status(400).json({ success: false, message: 'معرّف الكابتن مطلوب' });
+    const driver = getDriver(driverId);
+    if (!driver) return res.status(404).json({ success: false, message: 'الكابتن غير موجود' });
+    if (!driver.available || driver.type !== trip.vehicleType) {
+      return res.status(409).json({ success: false, message: 'الكابتن غير متاح لهذا الطلب' });
+    }
+
+    const reserved = reserveDriver(driver.id);
+    if (!reserved) return res.status(409).json({ success: false, message: 'الكابتن لم يعد متاحًا' });
     const updated = await updateTrip(trip.id, {
-      driver,
+      driver: reserved,
       status: 'driver_assigned',
       statusChangedAt: Date.now(),
-      statusActor: 'dispatch'
+      statusActor: 'dispatch',
+      statusHistory: appendStatusHistory(trip, 'driver_assigned', 'dispatch', { driverId: reserved.id })
     });
     res.json({ success: true, data: updated });
   } catch (error) { next(error); }
@@ -158,8 +211,10 @@ router.post('/:id/cancel', async (req, res, next) => {
       status: 'cancelled',
       statusChangedAt: Date.now(),
       statusActor: 'customer',
-      cancelReason: String(req.body?.reason || 'customer_request').slice(0, 120)
+      cancelReason: String(req.body?.reason || 'customer_request').slice(0, 120),
+      statusHistory: appendStatusHistory(trip, 'cancelled', 'customer', { reason: String(req.body?.reason || 'customer_request').slice(0, 120) })
     });
+    if (trip.driver?.id) releaseDriver(String(trip.driver.id));
     res.json({ success: true, data: updated });
   } catch (error) { next(error); }
 });
