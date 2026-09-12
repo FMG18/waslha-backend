@@ -11,6 +11,10 @@ const DEMO_CAPTAIN_PHONE = '9647700000099';
 const DEMO_CAPTAIN_CODE = '246810';
 const DEMO_CAPTAIN_ID = 'demo-captain-001';
 const DEMO_CAPTAIN_NAME = 'كابتن وصلها التجريبي';
+const DEMO_ADMIN_PHONE = '9647700000088';
+const DEMO_ADMIN_CODE = '135790';
+const DEMO_ADMIN_ID = 'demo-admin-001';
+const DEMO_ADMIN_NAME = 'مدير وصلها التجريبي';
 const otpRequestLimit = rateLimit({ windowMs: 60_000, max: 5, key: (req) => `otp-request:${req.ip || 'unknown'}` });
 const otpVerifyLimit = rateLimit({ windowMs: 60_000, max: 12, key: (req) => `otp-verify:${req.ip || 'unknown'}` });
 const googleLoginLimit = rateLimit({ windowMs: 60_000, max: 12, key: (req) => `google:${req.ip || 'unknown'}` });
@@ -19,79 +23,36 @@ router.post('/request-code', otpRequestLimit, (req, res) => {
   const phone = String(req.body?.phone || '').replace(/\s+/g, '').trim();
   if (!/^\+?[0-9]{8,15}$/.test(phone)) return res.status(400).json({ success: false, message: 'رقم الهاتف غير صالح' });
   const isDemoCaptain = phone === DEMO_CAPTAIN_PHONE;
-  const code = isDemoCaptain
-    ? DEMO_CAPTAIN_CODE
-    : (process.env.NODE_ENV === 'production' ? String(crypto.randomInt(100000, 1000000)) : '123456');
+  const isDemoAdmin = phone === DEMO_ADMIN_PHONE;
+  const code = isDemoCaptain ? DEMO_CAPTAIN_CODE : isDemoAdmin ? DEMO_ADMIN_CODE : (process.env.NODE_ENV === 'production' ? String(crypto.randomInt(100000, 1000000)) : '123456');
   pending.set(phone, { code, expiresAt: Date.now() + 300000, attempts: 0 });
-  res.json({
-    success: true,
-    message: 'تم إرسال رمز التحقق',
-    expiresIn: 300,
-    ...(process.env.NODE_ENV !== 'production' || isDemoCaptain ? { devCode: code } : {})
-  });
+  res.json({ success: true, message: 'تم إرسال رمز التحقق', expiresIn: 300, ...((process.env.NODE_ENV !== 'production' || isDemoCaptain || isDemoAdmin) ? { devCode: code } : {}) });
 });
 
 router.post('/verify-code', otpVerifyLimit, async (req, res, next) => {
   try {
     const phone = String(req.body?.phone || '').replace(/\s+/g, '').trim();
-const code = String(req.body?.code || '');
+    const code = String(req.body?.code || '');
 
-// Demo captain: do not depend on the in-memory OTP map.
-// Vercel functions may run on different instances between requests.
-if (phone === DEMO_CAPTAIN_PHONE) {
-  if (code !== DEMO_CAPTAIN_CODE) {
-    return res.status(400).json({
-      success: false,
-      message: 'رمز التحقق غير صحيح'
-    });
-  }
-
-  const token = await issueAccessToken({
-    userId: DEMO_CAPTAIN_ID,
-    role: 'driver'
-  });
-
-  return res.json({
-    success: true,
-    data: {
-      userId: DEMO_CAPTAIN_ID,
-      phone: DEMO_CAPTAIN_PHONE,
-      role: 'driver',
-      token,
-      name: DEMO_CAPTAIN_NAME
-    }
-  });
-}
-
-// Normal users continue using the existing OTP flow.
-const item = pending.get(phone);
-
-if (!item || item.expiresAt < Date.now() || item.attempts >= 5 || item.code !== code) {
-  if (item) item.attempts += 1;
-  return res.status(400).json({
-    success: false,
-    message: 'رمز التحقق غير صحيح أو منتهي'
-  });
-}
-
-pending.delete(phone);
-    // The demo captain is intentionally independent from MongoDB.
-    // This keeps the test account available even when the database is unavailable,
-    // while still requiring the normal JWT authentication on captain routes.
     if (phone === DEMO_CAPTAIN_PHONE) {
+      if (code !== DEMO_CAPTAIN_CODE) return res.status(400).json({ success: false, message: 'رمز التحقق غير صحيح' });
       const token = await issueAccessToken({ userId: DEMO_CAPTAIN_ID, role: 'driver' });
-      return res.json({
-        success: true,
-        data: {
-          userId: DEMO_CAPTAIN_ID,
-          phone: DEMO_CAPTAIN_PHONE,
-          role: 'driver',
-          token,
-          name: DEMO_CAPTAIN_NAME
-        }
-      });
+      return res.json({ success: true, data: { userId: DEMO_CAPTAIN_ID, phone: DEMO_CAPTAIN_PHONE, role: 'driver', token, name: DEMO_CAPTAIN_NAME } });
     }
 
+    if (phone === DEMO_ADMIN_PHONE) {
+      if (code !== DEMO_ADMIN_CODE) return res.status(400).json({ success: false, message: 'رمز التحقق غير صحيح' });
+      const token = await issueAccessToken({ userId: DEMO_ADMIN_ID, role: 'admin' });
+      return res.json({ success: true, data: { userId: DEMO_ADMIN_ID, phone: DEMO_ADMIN_PHONE, role: 'admin', token, name: DEMO_ADMIN_NAME } });
+    }
+
+    const item = pending.get(phone);
+    if (!item || item.expiresAt < Date.now() || item.attempts >= 5 || item.code !== code) {
+      if (item) item.attempts += 1;
+      return res.status(400).json({ success: false, message: 'رمز التحقق غير صحيح أو منتهي' });
+    }
+
+    pending.delete(phone);
     const user = await upsertUser({ phone, role: 'customer' });
     const token = await issueAccessToken({ userId: user.id, role: user.role });
     res.json({ success: true, data: { userId: user.id, phone: user.phone, role: user.role, token, name: user.name } });
