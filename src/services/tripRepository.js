@@ -24,9 +24,15 @@ export async function createTrip(data) {
 }
 
 export async function getTrip(id) {
+  const normalizedId = String(id || '').trim();
+  if (!normalizedId) return null;
   const c = collection();
-  if (c) return c.findOne({ _id: id });
-  return memory.get(id) || null;
+  if (c) {
+    const byId = await c.findOne({ _id: normalizedId });
+    if (byId) return byId;
+    return c.findOne({ id: normalizedId });
+  }
+  return memory.get(normalizedId) || null;
 }
 
 export async function listTrips(customerId) {
@@ -58,11 +64,11 @@ export async function updateTrip(id, patch, options = {}) {
 
   const c = collection();
   if (c) {
-    await c.updateOne({ _id: id }, { $set: updated });
+    await c.updateOne({ _id: current._id }, { $set: updated });
     return getTrip(id);
   }
 
-  const trip = memory.get(id);
+  const trip = memory.get(String(id));
   if (!trip) return null;
   Object.assign(trip, updated);
   return trip;
