@@ -7,7 +7,7 @@ import { rateLimit } from '../middleware/rate-limit.js';
 
 const router = Router();
 const pending = new Map();
-const DEMO_CAPTAIN_PHONE = '+9647700000099';
+const DEMO_CAPTAIN_PHONE = '9647700000099';
 const DEMO_CAPTAIN_CODE = '246810';
 const DEMO_CAPTAIN_ID = 'demo-captain-001';
 const DEMO_CAPTAIN_NAME = 'كابتن وصلها التجريبي';
