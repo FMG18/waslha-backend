@@ -10,6 +10,7 @@ const pending = new Map();
 const DEMO_CAPTAIN_PHONE = '+9647700000099';
 const DEMO_CAPTAIN_CODE = '246810';
 const DEMO_CAPTAIN_ID = 'demo-captain-001';
+const DEMO_CAPTAIN_NAME = 'كابتن وصلها التجريبي';
 const otpRequestLimit = rateLimit({ windowMs: 60_000, max: 5, key: (req) => `otp-request:${req.ip || 'unknown'}` });
 const otpVerifyLimit = rateLimit({ windowMs: 60_000, max: 12, key: (req) => `otp-verify:${req.ip || 'unknown'}` });
 const googleLoginLimit = rateLimit({ windowMs: 60_000, max: 12, key: (req) => `google:${req.ip || 'unknown'}` });
@@ -40,13 +41,27 @@ router.post('/verify-code', otpVerifyLimit, async (req, res, next) => {
       return res.status(400).json({ success: false, message: 'رمز التحقق غير صحيح أو منتهي' });
     }
     pending.delete(phone);
-    const isDemoCaptain = phone === DEMO_CAPTAIN_PHONE;
-    const user = await upsertUser({ phone, role: isDemoCaptain ? 'driver' : 'customer' });
-    const normalizedUser = isDemoCaptain
-      ? { ...user, id: DEMO_CAPTAIN_ID, role: 'driver', name: user.name || 'كابتن وصلها التجريبي' }
-      : user;
-    const token = await issueAccessToken({ userId: normalizedUser.id, role: normalizedUser.role });
-    res.json({ success: true, data: { userId: normalizedUser.id, phone: normalizedUser.phone, role: normalizedUser.role, token, name: normalizedUser.name } });
+
+    // The demo captain is intentionally independent from MongoDB.
+    // This keeps the test account available even when the database is unavailable,
+    // while still requiring the normal JWT authentication on captain routes.
+    if (phone === DEMO_CAPTAIN_PHONE) {
+      const token = await issueAccessToken({ userId: DEMO_CAPTAIN_ID, role: 'driver' });
+      return res.json({
+        success: true,
+        data: {
+          userId: DEMO_CAPTAIN_ID,
+          phone: DEMO_CAPTAIN_PHONE,
+          role: 'driver',
+          token,
+          name: DEMO_CAPTAIN_NAME
+        }
+      });
+    }
+
+    const user = await upsertUser({ phone, role: 'customer' });
+    const token = await issueAccessToken({ userId: user.id, role: user.role });
+    res.json({ success: true, data: { userId: user.id, phone: user.phone, role: user.role, token, name: user.name } });
   } catch (error) { next(error); }
 });
 
