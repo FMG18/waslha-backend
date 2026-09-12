@@ -34,14 +34,47 @@ router.post('/request-code', otpRequestLimit, (req, res) => {
 router.post('/verify-code', otpVerifyLimit, async (req, res, next) => {
   try {
     const phone = String(req.body?.phone || '').replace(/\s+/g, '').trim();
-    const code = String(req.body?.code || '');
-    const item = pending.get(phone);
-    if (!item || item.expiresAt < Date.now() || item.attempts >= 5 || item.code !== code) {
-      if (item) item.attempts += 1;
-      return res.status(400).json({ success: false, message: 'رمز التحقق غير صحيح أو منتهي' });
-    }
-    pending.delete(phone);
+const code = String(req.body?.code || '');
 
+// Demo captain: do not depend on the in-memory OTP map.
+// Vercel functions may run on different instances between requests.
+if (phone === DEMO_CAPTAIN_PHONE) {
+  if (code !== DEMO_CAPTAIN_CODE) {
+    return res.status(400).json({
+      success: false,
+      message: 'رمز التحقق غير صحيح'
+    });
+  }
+
+  const token = await issueAccessToken({
+    userId: DEMO_CAPTAIN_ID,
+    role: 'driver'
+  });
+
+  return res.json({
+    success: true,
+    data: {
+      userId: DEMO_CAPTAIN_ID,
+      phone: DEMO_CAPTAIN_PHONE,
+      role: 'driver',
+      token,
+      name: DEMO_CAPTAIN_NAME
+    }
+  });
+}
+
+// Normal users continue using the existing OTP flow.
+const item = pending.get(phone);
+
+if (!item || item.expiresAt < Date.now() || item.attempts >= 5 || item.code !== code) {
+  if (item) item.attempts += 1;
+  return res.status(400).json({
+    success: false,
+    message: 'رمز التحقق غير صحيح أو منتهي'
+  });
+}
+
+pending.delete(phone);
     // The demo captain is intentionally independent from MongoDB.
     // This keeps the test account available even when the database is unavailable,
     // while still requiring the normal JWT authentication on captain routes.
