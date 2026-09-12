@@ -3,10 +3,10 @@ import { getTrip, listTrips, updateTrip } from '../services/tripRepository.js';
 import { getDriver, reserveDriver, releaseDriver, setDriverAvailability } from '../services/driverRegistry.js';
 import { canTransition } from '../services/tripState.js';
 import { createNotification } from '../services/notificationRepository.js';
-import { requireApiAuth, allowRoles } from '../middleware/auth.js';
+import { requireAuth, allowRoles } from '../middleware/auth.js';
 
 const router = Router();
-router.use(requireApiAuth, allowRoles('driver'));
+router.use(requireAuth, allowRoles('driver'));
 
 const appendHistory = (trip, status, actor, metadata = null) => [
   ...(Array.isArray(trip.statusHistory) ? trip.statusHistory : []),
