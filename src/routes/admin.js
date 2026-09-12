@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { requireAuth, allowRoles } from '../middleware/auth.js';
 import { getTrip, listTrips, updateTrip } from '../services/tripRepository.js';
-import { listDrivers, getDriver, reserveDriver, releaseDriver } from '../services/driverRegistry.js';
+import { listDrivers, getDriver, reserveDriver, releaseDriver, setDriverAvailability } from '../services/driverRegistry.js';
 import { canTransition } from '../services/tripState.js';
 import { createNotification } from '../services/notificationRepository.js';
 
@@ -90,6 +90,18 @@ router.post('/trips/:id/cancel', async (req, res, next) => {
 router.get('/drivers', (_req, res) => {
   const drivers = listDrivers();
   res.json({ success: true, data: drivers, meta: { count: drivers.length, online: drivers.filter((d) => d.available).length } });
+});
+
+router.get('/drivers/:id', (req, res) => {
+  const driver = getDriver(req.params.id);
+  if (!driver) return res.status(404).json({ success: false, message: 'الكابتن غير موجود' });
+  res.json({ success: true, data: driver });
+});
+
+router.patch('/drivers/:id/availability', (req, res) => {
+  const driver = setDriverAvailability(req.params.id, Boolean(req.body?.available));
+  if (!driver) return res.status(404).json({ success: false, message: 'الكابتن غير موجود' });
+  res.json({ success: true, data: driver });
 });
 
 export default router;
