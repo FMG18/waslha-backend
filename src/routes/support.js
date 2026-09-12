@@ -2,7 +2,7 @@ import { Router } from 'express';
 import crypto from 'node:crypto';
 
 const router = Router();
-const tickets = [];
+export const tickets = [];
 
 router.post('/tickets', (req, res) => {
   const { userId = 'guest', category = 'general', subject, message, tripId = null } = req.body || {};
