@@ -1,9 +1,9 @@
 import { Router } from 'express';
+import { requireAuth, allowRoles } from '../middleware/auth.js';
 import { getTrip, listTrips, updateTrip } from '../services/tripRepository.js';
 import { listDrivers, getDriver, reserveDriver, releaseDriver, setDriverAvailability } from '../services/driverRegistry.js';
 import { canTransition } from '../services/tripState.js';
 import { createNotification } from '../services/notificationRepository.js';
-import { requireAuth, allowRoles } from '../middleware/auth.js';
 
 const router = Router();
 router.use(requireAuth, allowRoles('admin'));
@@ -106,10 +106,24 @@ router.get('/drivers', (_req, res) => {
   res.json({ success: true, data: drivers, meta: { count: drivers.length, online: drivers.filter((d) => d.available).length } });
 });
 
-router.get('/drivers/:id', (req, res) => {
-  const driver = getDriver(req.params.id);
-  if (!driver) return res.status(404).json({ success: false, message: 'الكابتن غير موجود' });
-  res.json({ success: true, data: driver });
+router.get('/drivers/:id', async (req, res, next) => {
+  try {
+    const driver = getDriver(req.params.id);
+    if (!driver) return res.status(404).json({ success: false, message: 'الكابتن غير موجود' });
+    const trips = await listTrips();
+    const driverTrips = trips.filter((trip) => String(trip.driver?.id || '') === String(driver.id));
+    res.json({ success: true, data: { ...driver, tripsCount: driverTrips.length, activeTripsCount: driverTrips.filter((trip) => !['completed', 'cancelled'].includes(trip.status)).length } });
+  } catch (error) { next(error); }
+});
+
+router.get('/drivers/:id/trips', async (req, res, next) => {
+  try {
+    const driver = getDriver(req.params.id);
+    if (!driver) return res.status(404).json({ success: false, message: 'الكابتن غير موجود' });
+    const trips = await listTrips();
+    const data = trips.filter((trip) => String(trip.driver?.id || '') === String(driver.id));
+    res.json({ success: true, data });
+  } catch (error) { next(error); }
 });
 
 router.patch('/drivers/:id/availability', (req, res) => {
