@@ -9,6 +9,7 @@ import captainRoutes from './routes/captain.js';
 import adminRoutes from './routes/admin.js';
 import adminUsersRoutes from './routes/admin-users.js';
 import adminOpsRoutes from './routes/admin-ops.js';
+import adminAuditRoutes from './routes/admin-audit.js';
 import catalogRoutes from './routes/catalog.js';
 import driverRoutes from './routes/drivers.js';
 import ratingRoutes from './routes/ratings.js';
@@ -38,6 +39,7 @@ app.use('/api/v1/captain', captainRoutes);
 app.use('/api/v1/admin', adminRoutes);
 app.use('/api/v1/admin', adminUsersRoutes);
 app.use('/api/v1/admin/ops', adminOpsRoutes);
+app.use('/api/v1/admin/audit', adminAuditRoutes);
 app.use('/api/v1/trips', secureCustomerRoutes, tripRoutes);
 app.use('/api/v1/catalog', catalogRoutes);
 app.use('/api/v1/drivers', requireApiAuth, driverRoutes);
@@ -48,7 +50,7 @@ app.use('/api/v1/support', secureCustomerRoutes, supportRoutes);
 app.use('/api/v1/places', secureCustomerRoutes, placesRoutes);
 
 app.use((_req, res) => res.status(404).json({ success: false, message: 'المسار غير موجود' }));
-app.use((err, _req, res, _next) => { console.error(err); res.status(500).json({ success: false, message: 'حدث خطأ داخلي في الخادم' }); });
+app.use((err, _req, res, _next) => { console.error(err); res.status(500).json({ success: false, message: 'حدث خطأ داخلي في الخادم' }));
 
 void connectDatabase().catch((error) => console.error('Database connection failed:', error.message));
 
