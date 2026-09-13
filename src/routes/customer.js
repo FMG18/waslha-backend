@@ -2,6 +2,7 @@ import { Router } from 'express';
 import crypto from 'node:crypto';
 import { getDatabase } from '../db/mongo.js';
 import { requireApiAuth } from '../middleware/route-security.js';
+import { listDrivers } from '../services/driverRegistry.js';
 
 const router = Router();
 router.use(requireApiAuth, (req, res, next) => {
@@ -25,8 +26,7 @@ function normalizePlace(input = {}) {
     error.statusCode = 400;
     throw error;
   }
-  const type = ['home', 'work'].includes(String(input.type)) ? String(input.type) : null;
-  return { id: String(input.id || crypto.randomUUID()), type, name, latitude, longitude, updatedAt: Date.now() };
+  return { id: String(input.id || crypto.randomUUID()), type: String(input.type || ''), name, latitude, longitude, updatedAt: Date.now() };
 }
 
 router.get('/me', async (req, res, next) => {
@@ -110,9 +110,25 @@ router.delete('/places/:id', async (req, res, next) => {
     const db = getDatabase();
     if (!db) return res.status(503).json({ success: false, message: 'قاعدة البيانات غير متاحة' });
     const user = await db.collection('users').findOne(userQuery(String(req.auth.userId)));
+    const before = Array.isArray(user?.savedPlaces) ? user.savedPlaces.length : 0;
     const places = Array.isArray(user?.savedPlaces) ? user.savedPlaces.filter((item) => String(item?.id) !== String(req.params.id)) : [];
     await db.collection('users').updateOne(userQuery(String(req.auth.userId)), { $set: { savedPlaces: places, updatedAt: Date.now() } });
-    res.json({ success: true, data: { deleted: places.length !== (user?.savedPlaces?.length || 0) } });
+    res.json({ success: true, data: { deleted: places.length < before } });
+  } catch (error) { next(error); }
+});
+
+router.get('/nearby-drivers', async (req, res, next) => {
+  try {
+    const vehicleType = String(req.query.vehicleType || '').trim().toLowerCase() || null;
+    const drivers = listDrivers({ vehicleType }).map((driver) => ({
+      id: driver.id,
+      type: driver.type,
+      lat: Number(driver.lat),
+      lng: Number(driver.lng),
+      available: Boolean(driver.available),
+      updatedAt: Date.now()
+    })).filter((driver) => Number.isFinite(driver.lat) && Number.isFinite(driver.lng));
+    res.json({ success: true, data: drivers });
   } catch (error) { next(error); }
 });
 
@@ -125,10 +141,7 @@ router.delete('/me', async (req, res, next) => {
     if (active) return res.status(409).json({ success: false, message: 'لا يمكن حذف الحساب أثناء وجود رحلة نشطة' });
     const result = await db.collection('users').deleteOne(userQuery(userId));
     if (!result.deletedCount) return res.status(404).json({ success: false, message: 'الحساب غير موجود' });
-    await Promise.all([
-      db.collection('deviceTokens').deleteMany({ userId }),
-      db.collection('notifications').deleteMany({ userId })
-    ]);
+    await Promise.all([db.collection('deviceTokens').deleteMany({ userId }), db.collection('notifications').deleteMany({ userId })]);
     res.json({ success: true, data: { deleted: true } });
   } catch (error) { next(error); }
 });
