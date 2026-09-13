@@ -18,6 +18,7 @@ import notificationRoutes from './routes/notifications.js';
 import supportRoutes from './routes/support.js';
 import updateRoutes from './routes/update.js';
 import placesRoutes from './routes/places.js';
+import customerRoutes from './routes/customer.js';
 import { connectDatabase } from './db/mongo.js';
 import { requireApiAuth, secureCustomerRoutes } from './middleware/route-security.js';
 
@@ -40,6 +41,7 @@ app.use('/api/v1/admin', adminRoutes);
 app.use('/api/v1/admin', adminUsersRoutes);
 app.use('/api/v1/admin/ops', adminOpsRoutes);
 app.use('/api/v1/admin/audit', adminAuditRoutes);
+app.use('/api/v1/customer', customerRoutes);
 app.use('/api/v1/trips', secureCustomerRoutes, tripRoutes);
 app.use('/api/v1/catalog', catalogRoutes);
 app.use('/api/v1/drivers', requireApiAuth, driverRoutes);
