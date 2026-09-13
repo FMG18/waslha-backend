@@ -50,7 +50,7 @@ app.use('/api/v1/support', secureCustomerRoutes, supportRoutes);
 app.use('/api/v1/places', secureCustomerRoutes, placesRoutes);
 
 app.use((_req, res) => res.status(404).json({ success: false, message: 'المسار غير موجود' }));
-app.use((err, _req, res, _next) => { console.error(err); res.status(500).json({ success: false, message: 'حدث خطأ داخلي في الخادم' }));
+app.use((err, _req, res, _next) => { console.error(err); res.status(500).json({ success: false, message: 'حدث خطأ داخلي في الخادم' }); });
 
 void connectDatabase().catch((error) => console.error('Database connection failed:', error.message));
 
