@@ -1,9 +1,9 @@
 import { Router } from 'express';
-import { requireAuth, allowRoles } from '../middleware/auth.js';
 import { getTrip, listTrips, updateTrip } from '../services/tripRepository.js';
 import { listDrivers, getDriver, reserveDriver, releaseDriver, setDriverAvailability } from '../services/driverRegistry.js';
 import { canTransition } from '../services/tripState.js';
 import { createNotification } from '../services/notificationRepository.js';
+import { requireAuth, allowRoles } from '../middleware/auth.js';
 
 const router = Router();
 router.use(requireAuth, allowRoles('admin'));
@@ -22,6 +22,20 @@ router.get('/overview', async (_req, res, next) => {
     const waiting = trips.filter((t) => t.status === 'searching');
     const revenue = completed.reduce((sum, trip) => sum + Number(trip.estimatedFare || 0), 0);
     res.json({ success: true, data: { totals: { trips: trips.length, activeTrips: active.length, waitingTrips: waiting.length, completedTrips: completed.length, drivers: drivers.length, onlineDrivers: drivers.filter((d) => d.available).length, revenue }, latestTrips: trips.slice(0, 20) } });
+  } catch (error) { next(error); }
+});
+
+router.get('/map', async (_req, res, next) => {
+  try {
+    const trips = await listTrips();
+    const activeTrips = trips.filter((trip) => trip.pickup && trip.destination && !['completed', 'cancelled'].includes(trip.status));
+    const drivers = listDrivers().map((driver) => ({
+      ...driver,
+      lat: Number.isFinite(Number(driver.lat)) ? Number(driver.lat) : null,
+      lng: Number.isFinite(Number(driver.lng)) ? Number(driver.lng) : null,
+      lastLocationAt: driver.lastLocationAt || null
+    }));
+    res.json({ success: true, data: { updatedAt: Date.now(), trips: activeTrips, drivers } });
   } catch (error) { next(error); }
 });
 
