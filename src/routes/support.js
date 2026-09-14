@@ -1,20 +1,40 @@
 import { Router } from 'express';
 import crypto from 'node:crypto';
+import { getDatabase } from '../db/mongo.js';
 
 const router = Router();
-export const tickets = [];
 
-router.post('/tickets', (req, res) => {
-  const { userId = 'guest', category = 'general', subject, message, tripId = null } = req.body || {};
-  if (!subject || !message) return res.status(400).json({ success: false, message: 'العنوان والرسالة مطلوبان' });
-  const ticket = { id: `T-${crypto.randomBytes(4).toString('hex').toUpperCase()}`, userId, category, subject: String(subject).slice(0, 120), message: String(message).slice(0, 1000), tripId, status: 'open', createdAt: Date.now() };
-  tickets.unshift(ticket);
-  res.status(201).json({ success: true, data: ticket });
+router.post('/tickets', async (req, res, next) => {
+  try {
+    const userId = String(req.auth?.userId || '');
+    const { category = 'general', subject, message, tripId = null } = req.body || {};
+    if (!userId) return res.status(401).json({ success: false, message: 'جلسة المستخدم غير صالحة' });
+    if (!subject || !message) return res.status(400).json({ success: false, message: 'العنوان والرسالة مطلوبان' });
+    const ticket = {
+      id: `T-${crypto.randomBytes(4).toString('hex').toUpperCase()}`,
+      userId,
+      category: String(category).slice(0, 40),
+      subject: String(subject).trim().slice(0, 120),
+      message: String(message).trim().slice(0, 1000),
+      tripId: tripId ? String(tripId) : null,
+      status: 'open',
+      createdAt: Date.now(),
+    };
+    const db = getDatabase();
+    if (!db) return res.status(503).json({ success: false, message: 'قاعدة البيانات غير متاحة' });
+    await db.collection('supportTickets').insertOne(ticket);
+    res.status(201).json({ success: true, data: ticket });
+  } catch (error) { next(error); }
 });
 
-router.get('/tickets', (req, res) => {
-  const userId = String(req.query.userId || 'guest');
-  res.json({ success: true, data: tickets.filter((ticket) => ticket.userId === userId) });
+router.get('/tickets', async (req, res, next) => {
+  try {
+    const userId = String(req.auth?.userId || '');
+    const db = getDatabase();
+    if (!db) return res.status(503).json({ success: false, message: 'قاعدة البيانات غير متاحة' });
+    const data = await db.collection('supportTickets').find({ userId }).sort({ createdAt: -1 }).limit(50).toArray();
+    res.json({ success: true, data });
+  } catch (error) { next(error); }
 });
 
 router.get('/faq', (_req, res) => {
