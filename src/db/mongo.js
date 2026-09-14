@@ -15,13 +15,23 @@ export async function connectDatabase() {
     const nextClient = new MongoClient(url, {
       serverSelectionTimeoutMS: 8000,
       connectTimeoutMS: 8000,
+      socketTimeoutMS: 10000,
     });
-    await nextClient.connect();
-    const nextDb = nextClient.db(process.env.DATABASE_NAME || 'waslha');
-    await ensureIndexes(nextDb);
-    client = nextClient;
-    db = nextDb;
-    return db;
+    try {
+      await nextClient.connect();
+      const nextDb = nextClient.db(process.env.DATABASE_NAME || 'waslha');
+      client = nextClient;
+      db = nextDb;
+      try {
+        await ensureIndexes(nextDb);
+      } catch (indexError) {
+        console.error('MongoDB index setup warning:', indexError.message);
+      }
+      return db;
+    } catch (error) {
+      await nextClient.close().catch(() => {});
+      throw error;
+    }
   })();
 
   try {
@@ -55,7 +65,7 @@ async function ensureIndexes(database) {
 }
 
 export async function closeDatabase() {
-  if (client) await client.close();
+  if (client) await client.close().catch(() => {});
   client = undefined;
   db = undefined;
   connecting = undefined;
