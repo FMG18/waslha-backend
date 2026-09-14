@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { getTrip, listTrips, updateTrip } from '../services/tripRepository.js';
-import { getDriver, reserveDriver, releaseDriver, setDriverAvailability } from '../services/driverRegistry.js';
+import { getDriver, reserveDriver, releaseDriver, setDriverAvailability, updateDriverLocation } from '../services/driverRegistry.js';
 import { canTransition } from '../services/tripState.js';
 import { createNotification } from '../services/notificationRepository.js';
 import { requireAuth, allowRoles } from '../middleware/auth.js';
@@ -28,6 +28,21 @@ router.patch('/availability', async (req, res, next) => {
     const driver = setDriverAvailability(driverId(req), Boolean(req.body?.available));
     if (!driver) return res.status(404).json({ success: false, message: 'الكابتن غير موجود' });
     res.json({ success: true, data: driver });
+  } catch (error) { next(error); }
+});
+
+router.patch('/location', async (req, res, next) => {
+  try {
+    const lat = Number(req.body?.lat);
+    const lng = Number(req.body?.lng);
+    if (!Number.isFinite(lat) || lat < -90 || lat > 90 || !Number.isFinite(lng) || lng < -180 || lng > 180) {
+      return res.status(400).json({ success: false, message: 'إحداثيات الموقع غير صالحة' });
+    }
+    const driver = getDriver(driverId(req));
+    if (!driver) return res.status(404).json({ success: false, message: 'الكابتن غير موجود' });
+    const updated = updateDriverLocation(driver.id, Number(lat.toFixed(6)), Number(lng.toFixed(6)));
+    if (!updated) return res.status(404).json({ success: false, message: 'تعذر تحديث موقع الكابتن' });
+    res.json({ success: true, data: updated });
   } catch (error) { next(error); }
 });
 
