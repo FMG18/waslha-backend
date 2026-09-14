@@ -4,7 +4,6 @@ import { listTrips } from '../services/tripRepository.js';
 import { listDrivers } from '../services/driverRegistry.js';
 import { createNotification } from '../services/notificationRepository.js';
 import { requireAuth, allowRoles } from '../middleware/auth.js';
-import { tickets } from './support.js';
 
 const router = Router();
 router.use(requireAuth, allowRoles('admin'));
@@ -76,18 +75,30 @@ router.post('/notifications', async (req, res, next) => {
   } catch (error) { next(error); }
 });
 
-router.get('/support/tickets', (_req, res) => {
-  res.json({ success: true, data: tickets.slice(0, 200) });
+router.get('/support/tickets', async (_req, res, next) => {
+  try {
+    const db = getDatabase();
+    if (!db) return res.status(503).json({ success: false, message: 'قاعدة البيانات غير متاحة' });
+    const data = await db.collection('supportTickets').find({}).sort({ createdAt: -1 }).limit(200).toArray();
+    res.json({ success: true, data });
+  } catch (error) { next(error); }
 });
 
-router.patch('/support/tickets/:id', (req, res) => {
-  const ticket = tickets.find((t) => t.id === String(req.params.id));
-  if (!ticket) return res.status(404).json({ success: false, message: 'التذكرة غير موجودة' });
-  const status = String(req.body?.status || '').toLowerCase();
-  if (!['open', 'pending', 'resolved', 'closed'].includes(status)) return res.status(400).json({ success: false, message: 'حالة التذكرة غير صالحة' });
-  ticket.status = status;
-  ticket.updatedAt = Date.now();
-  res.json({ success: true, data: ticket });
+router.patch('/support/tickets/:id', async (req, res, next) => {
+  try {
+    const db = getDatabase();
+    if (!db) return res.status(503).json({ success: false, message: 'قاعدة البيانات غير متاحة' });
+    const id = String(req.params.id);
+    const status = String(req.body?.status || '').toLowerCase();
+    if (!['open', 'pending', 'resolved', 'closed'].includes(status)) {
+      return res.status(400).json({ success: false, message: 'حالة التذكرة غير صالحة' });
+    }
+    const existing = await db.collection('supportTickets').findOne({ id });
+    if (!existing) return res.status(404).json({ success: false, message: 'التذكرة غير موجودة' });
+    await db.collection('supportTickets').updateOne({ id }, { $set: { status, updatedAt: Date.now() } });
+    const ticket = await db.collection('supportTickets').findOne({ id });
+    res.json({ success: true, data: ticket });
+  } catch (error) { next(error); }
 });
 
 export default router;
