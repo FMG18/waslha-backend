@@ -35,6 +35,23 @@ app.use(morgan('combined'));
 app.get('/health', (_req, res) => res.json({ success: true, service: 'waslha-backend', version: '1.5.0', status: 'ready', database: process.env.DATABASE_URL ? 'configured' : 'memory-fallback' }));
 app.get('/api/v1', (_req, res) => res.json({ success: true, service: 'Waslha Taxi API', version: 'v1', mode: 'taxi-only' }));
 
+// Vercel can create a fresh serverless instance while the first MongoDB connection
+// is still being established. Wait for that connection instead of returning a
+// misleading 503 from customer endpoints during cold starts.
+app.use(async (req, res, next) => {
+  if (req.path === '/health' || req.path === '/api/v1') return next();
+  try {
+    const db = await connectDatabase();
+    if (!db && process.env.DATABASE_URL) {
+      return res.status(503).json({ success: false, message: 'قاعدة البيانات غير متاحة حالياً' });
+    }
+    next();
+  } catch (error) {
+    console.error('Database readiness failed:', error.message);
+    res.status(503).json({ success: false, message: 'قاعدة البيانات غير متاحة حالياً' });
+  }
+});
+
 app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/update', updateRoutes);
 app.use('/api/v1/captain', captainRoutes);
@@ -54,8 +71,7 @@ app.use('/api/v1/support', secureCustomerRoutes, supportRoutes);
 app.use('/api/v1/places', secureCustomerRoutes, placesRoutes);
 
 app.use((_req, res) => res.status(404).json({ success: false, message: 'المسار غير موجود' }));
-app.use((err, _req, res, _next) => { console.error(err); res.status(500).json({ success: false, message: 'حدث خطأ داخلي في الخادم' }); });
-
-void connectDatabase().catch((error) => console.error('Database connection failed:', error.message));
+app.use((err, _req, res, _next) => { console.error(err); res.status(500).json({ success: false, message: 'حدث خطأ داخلي في الخادم' });
+});
 
 export default app;
