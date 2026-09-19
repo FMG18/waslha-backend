@@ -48,7 +48,7 @@ router.patch('/location', async (req, res, next) => {
 
 router.get('/trips/available', async (req, res, next) => {
   try {
-    const driver = getDriver(driverId(req));
+    const driver = await getDriver(driverId(req));
     if (!driver) return res.status(404).json({ success: false, message: 'الكابتن غير موجود' });
     if (!driver.available) return res.json({ success: true, data: [] });
     const trips = await listTrips();
