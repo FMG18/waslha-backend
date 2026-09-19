@@ -16,7 +16,7 @@ const appendHistory = (trip, status, actor, metadata = null) => [
 router.get('/overview', async (_req, res, next) => {
   try {
     const trips = await listTrips();
-    const drivers = listDrivers();
+    const drivers = await listDrivers();
     const completed = trips.filter((t) => t.status === 'completed');
     const active = trips.filter((t) => ['searching', 'driver_assigned', 'arriving', 'in_progress'].includes(t.status));
     const waiting = trips.filter((t) => t.status === 'searching');
@@ -108,7 +108,7 @@ router.get('/drivers', (_req, res) => {
 
 router.get('/drivers/:id', async (req, res, next) => {
   try {
-    const driver = getDriver(req.params.id);
+    const driver = await getDriver(req.params.id);
     if (!driver) return res.status(404).json({ success: false, message: 'الكابتن غير موجود' });
     const trips = await listTrips();
     const driverTrips = trips.filter((trip) => String(trip.driver?.id || '') === String(driver.id));
@@ -118,7 +118,7 @@ router.get('/drivers/:id', async (req, res, next) => {
 
 router.get('/drivers/:id/trips', async (req, res, next) => {
   try {
-    const driver = getDriver(req.params.id);
+    const driver = await getDriver(req.params.id);
     if (!driver) return res.status(404).json({ success: false, message: 'الكابتن غير موجود' });
     const trips = await listTrips();
     const data = trips.filter((trip) => String(trip.driver?.id || '') === String(driver.id));
@@ -127,7 +127,7 @@ router.get('/drivers/:id/trips', async (req, res, next) => {
 });
 
 router.patch('/drivers/:id/availability', (req, res) => {
-  const driver = setDriverAvailability(req.params.id, Boolean(req.body?.available));
+  const driver = await setDriverAvailability(req.params.id, Boolean(req.body?.available));
   if (!driver) return res.status(404).json({ success: false, message: 'الكابتن غير موجود' });
   res.json({ success: true, data: driver });
 });
