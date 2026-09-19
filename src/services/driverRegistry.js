@@ -1,55 +1,220 @@
+import { getDatabase } from '../db/mongo.js';
 import { sortByDistance } from './geo.js';
 
-const drivers = [
-  { id: 'cap-101', name: 'أحمد', phone: null, rating: 4.9, vehicle: 'Toyota Corolla', plate: '1234', type: 'economy', lat: 33.5138, lng: 36.2765, available: true },
-  { id: 'cap-102', name: 'محمد', phone: null, rating: 4.8, vehicle: 'Hyundai Elantra', plate: '5682', type: 'economy', lat: 33.5180, lng: 36.2892, available: true },
-  { id: 'cap-203', name: 'سامر', phone: null, rating: 4.9, vehicle: 'Kia Sportage', plate: '9041', type: 'comfort', lat: 33.5050, lng: 36.2940, available: true },
-  { id: 'demo-captain-001', name: 'كابتن وصلها التجريبي', phone: '+9647700000099', rating: 5.0, vehicle: 'Toyota Corolla', plate: 'TEST-001', type: 'economy', lat: 33.5138, lng: 36.2913, available: true }
-];
+const memory = new Map();
+
+const collection = () => getDatabase()?.collection('drivers');
 
 const clone = (driver) => driver ? { ...driver } : null;
 
-export function listDrivers({ vehicleType = null } = {}) {
-  return drivers
-    .filter((driver) => driver.available && (!vehicleType || driver.type === vehicleType))
+const normalize = (driver) => {
+  if (!driver) return null;
+  return {
+    id: String(driver.id || driver._id),
+    name: String(driver.name || ''),
+    phone: driver.phone || null,
+    rating: Number.isFinite(Number(driver.rating)) ? Number(driver.rating) : 0,
+    vehicle: String(driver.vehicle || ''),
+    plate: String(driver.plate || ''),
+    type: String(driver.type || driver.vehicleType || 'economy'),
+    lat: Number.isFinite(Number(driver.lat)) ? Number(driver.lat) : null,
+    lng: Number.isFinite(Number(driver.lng)) ? Number(driver.lng) : null,
+    available: Boolean(driver.available),
+    lastLocationAt: driver.lastLocationAt || null,
+    updatedAt: driver.updatedAt || Date.now(),
+    createdAt: driver.createdAt || Date.now()
+  };
+};
+
+async function userForDriver(id) {
+  const db = getDatabase();
+  if (!db) return null;
+  return db.collection('users').findOne(
+    { $or: [{ id: String(id) }, { _id: String(id) }] },
+    { projection: { _id: 1, id: 1, name: 1, phone: 1, role: 1 } }
+  );
+}
+
+export async function ensureDriver(id) {
+  const normalizedId = String(id || '').trim();
+  if (!normalizedId) return null;
+
+  const c = collection();
+  if (c) {
+    const existing = await c.findOne({ id: normalizedId });
+    if (existing) return normalize(existing);
+
+    const user = await userForDriver(normalizedId);
+    if (!user || user.role !== 'driver') return null;
+
+    const now = Date.now();
+    const driver = normalize({
+      id: String(user.id || user._id),
+      name: user.name || '',
+      phone: user.phone || null,
+      rating: 0,
+      vehicle: '',
+      plate: '',
+      type: 'economy',
+      lat: null,
+      lng: null,
+      available: false,
+      lastLocationAt: null,
+      createdAt: now,
+      updatedAt: now
+    });
+
+    await c.updateOne(
+      { id: driver.id },
+      { $setOnInsert: { ...driver, _id: driver.id } },
+      { upsert: true }
+    );
+    return normalize(await c.findOne({ id: driver.id }));
+  }
+
+  return clone(normalize(memory.get(normalizedId)));
+}
+
+export async function listDrivers({ vehicleType = null, includeOffline = true } = {}) {
+  const type = vehicleType ? String(vehicleType).toLowerCase() : null;
+  const c = collection();
+
+  if (c) {
+    const filter = {};
+    if (type) filter.type = type;
+    if (!includeOffline) filter.available = true;
+    const docs = await c.find(filter).sort({ updatedAt: -1 }).limit(500).toArray();
+    return docs.map(normalize).map(clone);
+  }
+
+  return [...memory.values()]
+    .map(normalize)
+    .filter((driver) => (!type || driver.type === type) && (includeOffline || driver.available))
     .map(clone);
 }
 
-export function getDriver(id) {
-  return clone(drivers.find((driver) => driver.id === id));
+export async function getDriver(id) {
+  const normalizedId = String(id || '').trim();
+  if (!normalizedId) return null;
+
+  const c = collection();
+  if (c) {
+    const existing = await c.findOne({ id: normalizedId });
+    if (existing) return normalize(existing);
+    return ensureDriver(normalizedId);
+  }
+
+  return clone(normalize(memory.get(normalizedId)));
 }
 
-export function getNearestAvailableDriver(point, vehicleType = null) {
-  const eligible = listDrivers({ vehicleType });
-  if (!eligible.length) return null;
-  return clone(sortByDistance(point, eligible)[0] || null);
+async function writeDriver(id, patch) {
+  const normalizedId = String(id || '').trim();
+  if (!normalizedId) return null;
+
+  const now = Date.now();
+  const c = collection();
+
+  if (c) {
+    const current = await c.findOne({ id: normalizedId });
+    if (!current) return null;
+    await c.updateOne({ id: normalizedId }, { $set: { ...patch, updatedAt: now } });
+    return normalize(await c.findOne({ id: normalizedId }));
+  }
+
+  const current = memory.get(normalizedId);
+  if (!current) return null;
+  const updated = { ...current, ...patch, updatedAt: now };
+  memory.set(normalizedId, updated);
+  return clone(normalize(updated));
 }
 
-export function setDriverAvailability(id, available) {
-  const driver = drivers.find((item) => item.id === id);
+export async function setDriverAvailability(id, available) {
+  const driver = await ensureDriver(id);
   if (!driver) return null;
-  driver.available = Boolean(available);
-  return clone(driver);
+  return writeDriver(driver.id, { available: Boolean(available) });
 }
 
-export function updateDriverLocation(id, lat, lng) {
-  const driver = drivers.find((item) => item.id === id);
+export async function updateDriverLocation(id, lat, lng) {
+  const driver = await ensureDriver(id);
   if (!driver) return null;
-  driver.lat = lat;
-  driver.lng = lng;
-  return clone(driver);
+  return writeDriver(driver.id, {
+    lat: Number(lat),
+    lng: Number(lng),
+    lastLocationAt: Date.now()
+  });
 }
 
-export function reserveDriver(id) {
-  const driver = drivers.find((item) => item.id === id);
+export async function reserveDriver(id) {
+  const normalizedId = String(id || '').trim();
+  if (!normalizedId) return null;
+
+  const c = collection();
+  if (c) {
+    const result = await c.findOneAndUpdate(
+      { id: normalizedId, available: true },
+      { $set: { available: false, updatedAt: Date.now() } },
+      { returnDocument: 'after' }
+    );
+    return normalize(result.value);
+  }
+
+  const driver = memory.get(normalizedId);
   if (!driver || !driver.available) return null;
   driver.available = false;
-  return clone(driver);
+  driver.updatedAt = Date.now();
+  return clone(normalize(driver));
 }
 
-export function releaseDriver(id) {
-  const driver = drivers.find((item) => item.id === id);
+export async function releaseDriver(id) {
+  const driver = await ensureDriver(id);
   if (!driver) return null;
-  driver.available = true;
-  return clone(driver);
+  return writeDriver(driver.id, { available: true });
+}
+
+export async function upsertDriverProfile(id, patch = {}) {
+  const normalizedId = String(id || '').trim();
+  if (!normalizedId) return null;
+
+  const c = collection();
+  const now = Date.now();
+
+  if (c) {
+    const user = await userForDriver(normalizedId);
+    const existing = await c.findOne({ id: normalizedId });
+    const driver = normalize({
+      ...(existing || {}),
+      id: normalizedId,
+      name: patch.name ?? existing?.name ?? user?.name ?? '',
+      phone: patch.phone ?? existing?.phone ?? user?.phone ?? null,
+      rating: patch.rating ?? existing?.rating ?? 0,
+      vehicle: patch.vehicle ?? existing?.vehicle ?? '',
+      plate: patch.plate ?? existing?.plate ?? '',
+      type: patch.type ?? existing?.type ?? patch.vehicleType ?? 'economy',
+      lat: patch.lat ?? existing?.lat ?? null,
+      lng: patch.lng ?? existing?.lng ?? null,
+      available: patch.available ?? existing?.available ?? false,
+      lastLocationAt: patch.lastLocationAt ?? existing?.lastLocationAt ?? null,
+      createdAt: existing?.createdAt ?? now,
+      updatedAt: now
+    });
+    await c.updateOne({ id: normalizedId }, { $set: { ...driver, _id: normalizedId }, $setOnInsert: { createdAt: driver.createdAt } }, { upsert: true });
+    return normalize(await c.findOne({ id: normalizedId }));
+  }
+
+  const current = memory.get(normalizedId);
+  const next = normalize({
+    ...(current || {}),
+    id: normalizedId,
+    ...patch,
+    updatedAt: now,
+    createdAt: current?.createdAt || now
+  });
+  memory.set(normalizedId, next);
+  return clone(next);
+}
+
+export async function getNearestAvailableDriver(point, vehicleType = null) {
+  const eligible = await listDrivers({ vehicleType, includeOffline: false });
+  if (!eligible.length) return null;
+  return clone(sortByDistance(point, eligible)[0] || null);
 }
