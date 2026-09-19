@@ -150,12 +150,12 @@ export async function reserveDriver(id) {
 
   const c = collection();
   if (c) {
-    const result = await c.findOneAndUpdate(
+    const result = await c.updateOne(
       { id: normalizedId, available: true },
-      { $set: { available: false, updatedAt: Date.now() } },
-      { returnDocument: 'after' }
+      { $set: { available: false, updatedAt: Date.now() } }
     );
-    return normalize(result.value);
+    if (!result.matchedCount) return null;
+    return getDriver(normalizedId);
   }
 
   const driver = memory.get(normalizedId);
