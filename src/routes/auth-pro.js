@@ -3,6 +3,7 @@ import crypto from 'node:crypto';
 import { issueAccessToken } from '../auth/tokens.js';
 import { verifyGoogleIdToken } from '../auth/google.js';
 import { upsertGoogleUser, upsertUser } from '../services/userRepository.js';
+import { upsertDriverProfile } from '../services/driverRegistry.js';
 import { rateLimit } from '../middleware/rate-limit.js';
 
 const router = Router();
@@ -36,6 +37,7 @@ router.post('/verify-code', otpVerifyLimit, async (req, res, next) => {
 
     if (phone === DEMO_CAPTAIN_PHONE) {
       if (code !== DEMO_CAPTAIN_CODE) return res.status(400).json({ success: false, message: 'رمز التحقق غير صحيح' });
+      await upsertDriverProfile(DEMO_CAPTAIN_ID, { name: DEMO_CAPTAIN_NAME, phone: DEMO_CAPTAIN_PHONE, vehicle: 'Toyota Corolla', plate: 'TEST-001', type: 'economy', available: false });
       const token = await issueAccessToken({ userId: DEMO_CAPTAIN_ID, role: 'driver' });
       return res.json({ success: true, data: { userId: DEMO_CAPTAIN_ID, phone: DEMO_CAPTAIN_PHONE, role: 'driver', token, name: DEMO_CAPTAIN_NAME } });
     }
