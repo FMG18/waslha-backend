@@ -1,6 +1,9 @@
 import { Router } from 'express';
+import crypto from 'node:crypto';
 import { requireAuth, allowRoles } from '../middleware/auth.js';
 import { getTrip, listTrips, updateTrip } from '../services/tripRepository.js';
+import { getDatabase } from '../db/mongo.js';
+import { upsertDriverProfile } from '../services/driverRegistry.js';
 import { listDrivers, getDriver, reserveDriver, releaseDriver, setDriverAvailability } from '../services/driverRegistry.js';
 import { canTransition } from '../services/tripState.js';
 import { createNotification } from '../services/notificationRepository.js';
