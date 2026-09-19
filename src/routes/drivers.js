@@ -4,6 +4,15 @@ import { getDriver, listDrivers, setDriverAvailability, updateDriverLocation } f
 
 const router = Router();
 
+router.use((req, res, next) => {
+  if (!['admin', 'driver'].includes(req.auth?.role)) {
+    return res.status(403).json({ success: false, message: 'ليس لديك صلاحية لإدارة بيانات الكباتن' });
+  }
+  next();
+});
+
+const canAccessDriver = (req, id) => req.auth?.role === 'admin' || String(req.auth?.userId) === String(id);
+
 router.get('/nearby', (req, res) => {
   const type = req.query?.vehicleType ? String(req.query.vehicleType).toLowerCase() : null;
   const lat = Number(req.query?.lat);
@@ -16,18 +25,21 @@ router.get('/nearby', (req, res) => {
 });
 
 router.get('/:id', (req, res) => {
+  if (!canAccessDriver(req, req.params.id)) return res.status(403).json({ success: false, message: 'لا يمكنك الوصول إلى بيانات هذا الكابتن' });
   const driver = getDriver(req.params.id);
   if (!driver) return res.status(404).json({ success: false, message: 'الكابتن غير موجود' });
   res.json({ success: true, data: driver });
 });
 
 router.patch('/:id/availability', (req, res) => {
+  if (!canAccessDriver(req, req.params.id)) return res.status(403).json({ success: false, message: 'لا يمكنك تعديل بيانات هذا الكابتن' });
   const driver = setDriverAvailability(req.params.id, req.body?.available);
   if (!driver) return res.status(404).json({ success: false, message: 'الكابتن غير موجود' });
   res.json({ success: true, data: driver });
 });
 
 router.patch('/:id/location', (req, res) => {
+  if (!canAccessDriver(req, req.params.id)) return res.status(403).json({ success: false, message: 'لا يمكنك تعديل موقع هذا الكابتن' });
   const lat = Number(req.body?.lat);
   const lng = Number(req.body?.lng);
   if (![lat, lng].every(Number.isFinite) || lat < -90 || lat > 90 || lng < -180 || lng > 180) {
