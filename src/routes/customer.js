@@ -120,7 +120,7 @@ router.delete('/places/:id', async (req, res, next) => {
 router.get('/nearby-drivers', async (req, res, next) => {
   try {
     const vehicleType = String(req.query.vehicleType || '').trim().toLowerCase() || null;
-    const drivers = listDrivers({ vehicleType }).map((driver) => ({
+    const drivers = (await listDrivers({ vehicleType, includeOffline: false })).map((driver) => ({
       id: driver.id,
       type: driver.type,
       lat: Number(driver.lat),
