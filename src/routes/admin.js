@@ -104,9 +104,86 @@ router.post('/trips/:id/cancel', async (req, res, next) => {
   } catch (error) { next(error); }
 });
 
-router.get('/drivers', (_req, res) => {
+router.post('/drivers', async (req, res, next) => {
+  try {
+    const db = getDatabase();
+    if (!db) return res.status(503).json({ success: false, message: 'قاعدة البيانات غير متاحة' });
+
+    const phone = String(req.body?.phone || '').replace(/\s+/g, '').trim();
+    const name = String(req.body?.name || '').trim().slice(0, 80);
+    const type = String(req.body?.type || 'economy').toLowerCase();
+    const vehicle = String(req.body?.vehicle || '').trim().slice(0, 80);
+    const plate = String(req.body?.plate || '').trim().slice(0, 30);
+
+    if (!/^\+?[0-9]{8,15}$/.test(phone)) return res.status(400).json({ success: false, message: 'رقم الهاتف غير صالح' });
+    if (!name) return res.status(400).json({ success: false, message: 'اسم الكابتن مطلوب' });
+    if (!['economy', 'comfort', 'family'].includes(type)) return res.status(400).json({ success: false, message: 'نوع المركبة غير صالح' });
+
+    let user = await db.collection('users').findOne({ phone });
+    if (user && user.role !== 'driver') return res.status(409).json({ success: false, message: 'رقم الهاتف مرتبط بحساب ليس كابتناً' });
+
+    if (!user) {
+      const id = `usr_driver_${crypto.randomUUID()}`;
+      user = { _id: id, id, phone, role: 'driver', name, createdAt: Date.now(), updatedAt: Date.now() };
+      await db.collection('users').insertOne(user);
+    } else {
+      await db.collection('users').updateOne({ _id: user._id }, { $set: { name, updatedAt: Date.now() } });
+    }
+
+    const driver = await upsertDriverProfile(user.id, { name, phone, type, vehicle, plate, available: false });
+    res.status(201).json({ success: true, data: { ...driver, userId: user.id } });
+  } catch (error) {
+    if (error?.code === 11000) return res.status(409).json({ success: false, message: 'رقم الهاتف مستخدم مسبقاً' });
+    next(error);
+  }
+});
+
+router.patch('/drivers/:id/profile', async (req, res, next) => {
+  try {
+    const db = getDatabase();
+    if (!db) return res.status(503).json({ success: false, message: 'قاعدة البيانات غير متاحة' });
+
+    const id = String(req.params.id);
+    const user = await db.collection('users').findOne({ $or: [{ id }, { _id: id }] });
+    if (!user || user.role !== 'driver') return res.status(404).json({ success: false, message: 'حساب الكابتن غير موجود' });
+
+    const patch = {};
+    if (req.body?.name !== undefined) {
+      const name = String(req.body.name).trim().slice(0, 80);
+      if (!name) return res.status(400).json({ success: false, message: 'اسم الكابتن غير صالح' });
+      patch.name = name;
+    }
+    if (req.body?.phone !== undefined) {
+      const phone = String(req.body.phone).replace(/\s+/g, '').trim();
+      if (!/^\+?[0-9]{8,15}$/.test(phone)) return res.status(400).json({ success: false, message: 'رقم الهاتف غير صالح' });
+      const duplicate = await db.collection('users').findOne({ phone, id: { $ne: id } });
+      if (duplicate) return res.status(409).json({ success: false, message: 'رقم الهاتف مستخدم مسبقاً' });
+      patch.phone = phone;
+    }
+    if (Object.keys(patch).length) await db.collection('users').updateOne({ _id: user._id }, { $set: { ...patch, updatedAt: Date.now() } });
+
+    const driverPatch = {};
+    if (patch.name !== undefined) driverPatch.name = patch.name;
+    if (patch.phone !== undefined) driverPatch.phone = patch.phone;
+    if (req.body?.type !== undefined) {
+      const type = String(req.body.type).toLowerCase();
+      if (!['economy', 'comfort', 'family'].includes(type)) return res.status(400).json({ success: false, message: 'نوع المركبة غير صالح' });
+      driverPatch.type = type;
+    }
+    if (req.body?.vehicle !== undefined) driverPatch.vehicle = String(req.body.vehicle).trim().slice(0, 80);
+    if (req.body?.plate !== undefined) driverPatch.plate = String(req.body.plate).trim().slice(0, 30);
+
+    const driver = await upsertDriverProfile(id, driverPatch);
+    if (!driver) return res.status(404).json({ success: false, message: 'ملف الكابتن غير موجود' });
+    res.json({ success: true, data: driver });
+  } catch (error) { next(error); }
+});
+
+router.get('/drivers', async (_req, res, next) => {
+  try {
   const drivers = await listDrivers();
   res.json({ success: true, data: drivers, meta: { count: drivers.length, online: drivers.filter((d) => d.available).length } });
+  } catch (error) { next(error); }
 });
 
 router.get('/drivers/:id', async (req, res, next) => {
@@ -129,10 +206,12 @@ router.get('/drivers/:id/trips', async (req, res, next) => {
   } catch (error) { next(error); }
 });
 
-router.patch('/drivers/:id/availability', (req, res) => {
+router.patch('/drivers/:id/availability', async (req, res, next) => {
+  try {
   const driver = await setDriverAvailability(req.params.id, Boolean(req.body?.available));
   if (!driver) return res.status(404).json({ success: false, message: 'الكابتن غير موجود' });
   res.json({ success: true, data: driver });
+  } catch (error) { next(error); }
 });
 
 export default router;
