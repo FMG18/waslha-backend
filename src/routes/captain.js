@@ -17,7 +17,7 @@ const driverId = (req) => String(req.auth.userId);
 
 router.get('/me', async (req, res, next) => {
   try {
-    const driver = getDriver(driverId(req));
+    const driver = await getDriver(driverId(req));
     if (!driver) return res.status(404).json({ success: false, message: 'بيانات الكابتن غير موجودة' });
     res.json({ success: true, data: driver });
   } catch (error) { next(error); }
@@ -25,7 +25,7 @@ router.get('/me', async (req, res, next) => {
 
 router.patch('/availability', async (req, res, next) => {
   try {
-    const driver = setDriverAvailability(driverId(req), Boolean(req.body?.available));
+    const driver = await setDriverAvailability(driverId(req), Boolean(req.body?.available));
     if (!driver) return res.status(404).json({ success: false, message: 'الكابتن غير موجود' });
     res.json({ success: true, data: driver });
   } catch (error) { next(error); }
@@ -38,9 +38,9 @@ router.patch('/location', async (req, res, next) => {
     if (!Number.isFinite(lat) || lat < -90 || lat > 90 || !Number.isFinite(lng) || lng < -180 || lng > 180) {
       return res.status(400).json({ success: false, message: 'إحداثيات الموقع غير صالحة' });
     }
-    const driver = getDriver(driverId(req));
+    const driver = await getDriver(driverId(req));
     if (!driver) return res.status(404).json({ success: false, message: 'الكابتن غير موجود' });
-    const updated = updateDriverLocation(driver.id, Number(lat.toFixed(6)), Number(lng.toFixed(6)));
+    const updated = await updateDriverLocation(driver.id, Number(lat.toFixed(6)), Number(lng.toFixed(6)));
     if (!updated) return res.status(404).json({ success: false, message: 'تعذر تحديث موقع الكابتن' });
     res.json({ success: true, data: updated });
   } catch (error) { next(error); }
@@ -69,14 +69,14 @@ router.get('/trips', async (req, res, next) => {
 router.post('/trips/:id/accept', async (req, res, next) => {
   try {
     const id = driverId(req);
-    const driver = getDriver(id);
+    const driver = await getDriver(id);
     if (!driver) return res.status(404).json({ success: false, message: 'الكابتن غير موجود' });
     if (!driver.available) return res.status(409).json({ success: false, message: 'الكابتن غير متصل' });
     const trip = await getTrip(req.params.id);
     if (!trip) return res.status(404).json({ success: false, message: 'الرحلة غير موجودة' });
     if (trip.status !== 'searching') return res.status(409).json({ success: false, message: 'الطلب لم يعد متاحاً' });
     if (trip.vehicleType !== driver.type) return res.status(409).json({ success: false, message: 'نوع السيارة لا يطابق الطلب' });
-    const reserved = reserveDriver(id);
+    const reserved = await reserveDriver(id);
     if (!reserved) return res.status(409).json({ success: false, message: 'الكابتن غير متاح حالياً' });
     const now = Date.now();
     const updated = await updateTrip(trip.id, {
@@ -108,7 +108,7 @@ router.patch('/trips/:id/status', async (req, res, next) => {
       statusHistory: appendHistory(trip, status, id)
     });
     if (status === 'completed') {
-      releaseDriver(id);
+      await releaseDriver(id);
       await createNotification({ userId: trip.customerId, tripId: trip.id, type: 'trip', title: 'اكتملت الرحلة', body: 'انتهت الرحلة بنجاح.' });
     }
     res.json({ success: true, data: updated });
